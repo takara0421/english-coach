@@ -37,7 +37,7 @@ def evaluate_pronunciation(audio_bytes, target_sentence, api_key):
     try:
         genai.configure(api_key=api_key)
         # 処理速度と精度のバランスが良いモデルを選択
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-flash-lite-latest')
         
         prompt = f"""
         あなたは【非常に厳格な】英語の発音審査官です。
