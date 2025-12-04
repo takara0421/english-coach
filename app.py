@@ -52,7 +52,7 @@ if 'q_index' not in st.session_state:
 def evaluate_pronunciation(audio_bytes, target_sentence, api_key):
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash')
         
         prompt = f"""
         あなたは【非常に厳格な】英語の発音審査官です。
