@@ -86,7 +86,7 @@ def evaluate_pronunciation(audio_bytes, target_sentence, api_key):
 def evaluate_meaning(audio_bytes, target_word, target_meaning, api_key):
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash')
         
         prompt = f"""
         あなたは英語教師です。
