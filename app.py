@@ -47,12 +47,12 @@ if 'questions' not in st.session_state:
 if 'q_index' not in st.session_state:
     st.session_state.q_index = 0
 
-# --- 関数: Geminiによる判定 ---
+# --- 関数: Geminiによる判定 (英語発音) ---
 @st.cache_data(show_spinner=False)
 def evaluate_pronunciation(audio_bytes, target_sentence, api_key):
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         prompt = f"""
         あなたは【非常に厳格な】英語の発音審査官です。
@@ -65,6 +65,41 @@ def evaluate_pronunciation(audio_bytes, target_sentence, api_key):
             "transcription": "聞き取った英語",
             "score": 点数(0-100の数値),
             "advice": "日本語での具体的で厳しいアドバイス。"
+        }}
+        """
+        
+        response = model.generate_content([
+            prompt,
+            {"mime_type": "audio/wav", "data": audio_bytes}
+        ])
+        
+        text_resp = response.text.strip()
+        if text_resp.startswith("```json"):
+            text_resp = text_resp.replace("```json", "").replace("```", "")
+        return json.loads(text_resp)
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+# --- 関数: Geminiによる意味判定 (日本語) ---
+@st.cache_data(show_spinner=False)
+def evaluate_meaning(audio_bytes, target_word, target_meaning, api_key):
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        prompt = f"""
+        あなたは英語教師です。
+        ユーザーは英単語 "{target_word}" の日本語訳を音声で入力しました。
+        想定される正解は "{target_meaning}" です。
+        ユーザーの発言が、この単語の意味として適切か判定してください。
+        一字一句同じでなくても、類義語や文脈として正しい意味であれば正解としてください。
+
+        以下のJSON形式のみで評価を出力してください:
+        {{
+            "transcription": "聞き取った日本語",
+            "is_correct": true または false (ブール値),
+            "comment": "判定コメント（正解なら褒める、不正解なら惜しい点や正解を教える）"
         }}
         """
         
@@ -102,12 +137,35 @@ if st.session_state.q_index >= len(st.session_state.questions):
 # 現在の問題を取得
 q = st.session_state.questions[st.session_state.q_index]
 
-# --- UI表示 (録音前) ---
+# --- UI表示 ---
 st.progress((st.session_state.q_index) / len(st.session_state.questions))
 st.caption(f"Question {st.session_state.q_index + 1} / {len(st.session_state.questions)}")
 
-# ★修正点: 学習する単語と英文を表示
+# 1. 単語表示
 st.markdown(f"<p class='word-font'>Word: {q.get('word', '')}</p>", unsafe_allow_html=True)
+
+# --- 新機能: 単語の意味チェック ---
+# word_jpがある場合のみ表示
+if q.get('word_jp'):
+    st.write("🗣️ **単語の意味を日本語で答えてみよう**")
+    meaning_audio_key = f"rec_meaning_q{st.session_state.q_index}"
+    meaning_audio_value = st.audio_input("録音ボタンを押して、意味（日本語）を話してください", key=meaning_audio_key)
+
+    if meaning_audio_value:
+        st.spinner("意味を判定中... 🤔")
+        meaning_result = evaluate_meaning(meaning_audio_value.read(), q.get('word'), q.get('word_jp'), api_key)
+        
+        if "error" in meaning_result:
+            st.error(f"エラー: {meaning_result['error']}")
+        elif meaning_result:
+            if meaning_result.get('is_correct'):
+                st.success(f"⭕ **正解！** (聞き取り: {meaning_result['transcription']})\n\n{meaning_result['comment']}")
+            else:
+                st.error(f"❌ **不正解...** (聞き取り: {meaning_result['transcription']})\n\n{meaning_result['comment']}")
+
+st.markdown("---")
+
+# 2. 英文表示
 st.markdown(f"<p class='big-font'>{q['en']}</p>", unsafe_allow_html=True)
 
 # 模範音声
@@ -120,14 +178,12 @@ with st.expander("🎧 模範音声を聞く"):
         except:
             st.error("音声エラー")
 
-st.markdown("---")
-
-# 録音ボタン
+# 3. 英文録音ボタン
 audio_key = f"rec_q{st.session_state.q_index}"
-audio_value = st.audio_input("録音ボタンを押して読んでください", key=audio_key)
+audio_value = st.audio_input("録音ボタンを押して、英文を読んでください", key=audio_key)
 
 if audio_value:
-    st.write("判定中... 🤖")
+    st.write("発音判定中... 🤖")
     
     result = evaluate_pronunciation(audio_value.read(), q['en'], api_key)
     
@@ -144,7 +200,7 @@ if audio_value:
         with col2:
             st.write(f"**聞き取り:** {result['transcription']}")
         
-        # ★修正点: ここで単語と文章の日本語訳を表示
+        # 単語と文章の日本語訳を表示 (答え合わせ)
         with st.container():
             st.info(f"**単語の意味 ({q.get('word', '')}):** {q.get('word_jp', '---')}\n\n**文章の訳:** {q.get('jp', '---')}")
 
