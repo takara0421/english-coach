@@ -13,7 +13,7 @@ st.markdown("""
     <style>
     .big-font { font-size: 24px !important; font-weight: bold; color: #1E88E5; }
     .word-font { font-size: 20px; font-weight: bold; color: #2E7D32; margin-bottom: 5px; }
-    .jp-font { font-size: 16px; color: #555; margin-bottom: 20px; }
+    .def-font { font-size: 16px; font-style: italic; color: #555; margin-bottom: 10px; }
     .stAudio { width: 100%; }
     .stButton button { width: 100%; border-radius: 20px; }
     </style>
@@ -36,9 +36,20 @@ if 'questions' not in st.session_state:
     # ファイルがない、または読み込み失敗時のデフォルト問題
     if not questions_data:
         questions_data = [
-            {"word": "Photography", "word_jp": "写真撮影", "en": "I am interested in photography.", "jp": "私は写真に興味があります。"},
-            {"word": "Appointment", "word_jp": "予約", "en": "I'd like to make an appointment.", "jp": "予約を取りたいのですが。"},
-            {"word": "Recommendation", "word_jp": "おすすめ", "en": "Do you have any recommendations?", "jp": "何かおすすめはありますか？"}
+            {
+                "word": "Photography", 
+                "word_jp": "写真撮影", 
+                "word_en": "the art or practice of taking and processing photographs",
+                "en": "I am interested in photography.", 
+                "jp": "私は写真に興味があります。"
+            },
+            {
+                "word": "Appointment", 
+                "word_jp": "予約", 
+                "word_en": "an arrangement to meet someone at a particular time and place",
+                "en": "I'd like to make an appointment.", 
+                "jp": "予約を取りたいのですが。"
+            }
         ]
     
     st.session_state.questions = questions_data
@@ -47,7 +58,7 @@ if 'questions' not in st.session_state:
 if 'q_index' not in st.session_state:
     st.session_state.q_index = 0
 
-# --- 関数: Geminiによる判定 (英語発音) ---
+# --- 関数: Geminiによる判定 (英語発音 - 英文) ---
 @st.cache_data(show_spinner=False)
 def evaluate_pronunciation(audio_bytes, target_sentence, api_key):
     try:
@@ -81,9 +92,9 @@ def evaluate_pronunciation(audio_bytes, target_sentence, api_key):
     except Exception as e:
         return {"error": str(e)}
 
-# --- 関数: Geminiによる意味判定 (日本語) ---
+# --- 関数: Geminiによる意味判定 (日本語回答) ---
 @st.cache_data(show_spinner=False)
-def evaluate_meaning(audio_bytes, target_word, target_meaning, api_key):
+def evaluate_meaning_jp(audio_bytes, target_word, target_meaning, api_key):
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.0-flash')
@@ -116,6 +127,44 @@ def evaluate_meaning(audio_bytes, target_word, target_meaning, api_key):
     except Exception as e:
         return {"error": str(e)}
 
+# --- NEW 関数: Geminiによる英英定義判定 (英語回答) ---
+@st.cache_data(show_spinner=False)
+def evaluate_meaning_en(audio_bytes, target_word, target_def_en, api_key):
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.0-flash')
+        
+        prompt = f"""
+        あなたは英語教師です。
+        ユーザーは英単語 "{target_word}" の意味を「英語」で説明しようとしています。
+        
+        【正解の定義】: "{target_def_en}"
+        
+        ユーザーの音声を聞き取り、その説明が単語の意味として（大まかにでも）合っているか判定してください。
+        完全に定義通りでなくても、その単語の概念を説明できていれば正解としてください。
+
+        以下のJSON形式のみで評価を出力してください:
+        {{
+            "transcription": "聞き取った英語",
+            "is_correct": true または false (ブール値),
+            "comment": "日本語でのフィードバック（ユーザーの英語の良い点や、もっと良い表現など）"
+        }}
+        """
+        
+        response = model.generate_content([
+            prompt,
+            {"mime_type": "audio/wav", "data": audio_bytes}
+        ])
+        
+        text_resp = response.text.strip()
+        if text_resp.startswith("```json"):
+            text_resp = text_resp.replace("```json", "").replace("```", "")
+        return json.loads(text_resp)
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+
 # --- メイン画面 ---
 st.title("🎙️ AI English Coach")
 
@@ -144,32 +193,54 @@ st.caption(f"Question {st.session_state.q_index + 1} / {len(st.session_state.que
 # 1. 単語表示
 st.markdown(f"<p class='word-font'>Word: {q.get('word', '')}</p>", unsafe_allow_html=True)
 
-# --- 新機能: 単語の意味チェック ---
-# word_jpがある場合のみ表示
+# --- A. 単語の意味チェック (日本語) ---
 if q.get('word_jp'):
-    st.write("🗣️ **単語の意味を日本語で答えてみよう**")
-    meaning_audio_key = f"rec_meaning_q{st.session_state.q_index}"
-    meaning_audio_value = st.audio_input("録音ボタンを押して、意味（日本語）を話してください", key=meaning_audio_key)
+    st.write("🇯🇵 **意味を「日本語」で答えてみよう**")
+    meaning_jp_key = f"rec_meaning_jp_q{st.session_state.q_index}"
+    meaning_jp_audio = st.audio_input("録音ボタンを押して、日本語で意味を話してください", key=meaning_jp_key)
 
-    if meaning_audio_value:
-        st.spinner("意味を判定中... 🤔")
-        meaning_result = evaluate_meaning(meaning_audio_value.read(), q.get('word'), q.get('word_jp'), api_key)
+    if meaning_jp_audio:
+        st.spinner("日本語の意味を判定中... 🤔")
+        res_jp = evaluate_meaning_jp(meaning_jp_audio.read(), q.get('word'), q.get('word_jp'), api_key)
         
-        if "error" in meaning_result:
-            st.error(f"エラー: {meaning_result['error']}")
-        elif meaning_result:
-            if meaning_result.get('is_correct'):
-                st.success(f"⭕ **正解！** (聞き取り: {meaning_result['transcription']})\n\n{meaning_result['comment']}")
+        if "error" in res_jp:
+            st.error(f"エラー: {res_jp['error']}")
+        elif res_jp:
+            if res_jp.get('is_correct'):
+                st.success(f"⭕ **正解！** (聞き取り: {res_jp['transcription']})\n\n{res_jp['comment']}")
             else:
-                st.error(f"❌ **不正解...** (聞き取り: {meaning_result['transcription']})\n\n{meaning_result['comment']}")
+                st.error(f"❌ **不正解...** (聞き取り: {res_jp['transcription']})\n\n{res_jp['comment']}")
 
 st.markdown("---")
+
+# --- B. 単語の意味チェック (英語) ---
+# word_enがある場合のみ表示
+if q.get('word_en'):
+    st.write("🇺🇸 **意味を「英語」で説明してみよう**")
+    st.caption(f"ヒント: {q.get('word_en')}") # 難易度調整のためヒントとして表示（隠してもOK）
+    
+    meaning_en_key = f"rec_meaning_en_q{st.session_state.q_index}"
+    meaning_en_audio = st.audio_input("録音ボタンを押して、英語で意味を説明してください", key=meaning_en_key)
+
+    if meaning_en_audio:
+        st.spinner("英語の説明を判定中... 🤔")
+        res_en = evaluate_meaning_en(meaning_en_audio.read(), q.get('word'), q.get('word_en'), api_key)
+        
+        if "error" in res_en:
+            st.error(f"エラー: {res_en['error']}")
+        elif res_en:
+            if res_en.get('is_correct'):
+                st.success(f"⭕ **Great!** (You said: \"{res_en['transcription']}\")\n\n{res_en['comment']}")
+            else:
+                st.error(f"❌ **Not quite...** (You said: \"{res_en['transcription']}\")\n\n{res_en['comment']}")
+
+    st.markdown("---")
 
 # 2. 英文表示
 st.markdown(f"<p class='big-font'>{q['en']}</p>", unsafe_allow_html=True)
 
 # 模範音声
-with st.expander("🎧 模範音声を聞く"):
+with st.expander("🎧 英文の模範音声を聞く"):
     if q.get('en'):
         try:
             tts = gTTS(q['en'], lang='en')
@@ -179,6 +250,7 @@ with st.expander("🎧 模範音声を聞く"):
             st.error("音声エラー")
 
 # 3. 英文録音ボタン
+st.write("🗣️ **この英文を音読してください**")
 audio_key = f"rec_q{st.session_state.q_index}"
 audio_value = st.audio_input("録音ボタンを押して、英文を読んでください", key=audio_key)
 
@@ -202,7 +274,7 @@ if audio_value:
         
         # 単語と文章の日本語訳を表示 (答え合わせ)
         with st.container():
-            st.info(f"**単語の意味 ({q.get('word', '')}):** {q.get('word_jp', '---')}\n\n**文章の訳:** {q.get('jp', '---')}")
+            st.info(f"**単語:** {q.get('word', '')}\n\n**意味(JP):** {q.get('word_jp', '---')}\n\n**定義(EN):** {q.get('word_en', '---')}\n\n**文章訳:** {q.get('jp', '---')}")
 
         # アドバイスと次へボタン
         if result['score'] >= 80:
