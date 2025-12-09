@@ -63,7 +63,7 @@ if 'q_index' not in st.session_state:
 def evaluate_pronunciation(audio_bytes, target_sentence, api_key):
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash-lite')
         
         prompt = f"""
         あなたは【非常に厳格な】英語の発音審査官です。
@@ -97,7 +97,7 @@ def evaluate_pronunciation(audio_bytes, target_sentence, api_key):
 def evaluate_meaning_jp(audio_bytes, target_word, target_meaning, api_key):
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash-lite')
         
         prompt = f"""
         あなたは英語教師です。
@@ -132,7 +132,7 @@ def evaluate_meaning_jp(audio_bytes, target_word, target_meaning, api_key):
 def evaluate_meaning_en(audio_bytes, target_word, target_def_en, api_key):
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash-lite')
         
         prompt = f"""
         あなたは英語教師です。
