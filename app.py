@@ -5,6 +5,11 @@ import json
 import random
 import os
 
+# --- 🛠️ 設定: ここでモデル名を一括指定します ---
+# 動作確認済み安定版: 'gemini-1.5-flash'
+# 開発者プレビュー版: 'gemini-2.0-flash-exp' (もしエラーが出る場合は 1.5-flash に戻してください)
+GEMINI_MODEL_NAME = 'gemini-2.0-flash-exp' 
+
 # --- ページ設定 ---
 st.set_page_config(page_title="AI英会話コーチ", page_icon="🎙️")
 
@@ -63,7 +68,8 @@ if 'q_index' not in st.session_state:
 def evaluate_pronunciation(audio_bytes, target_sentence, api_key):
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        # 設定されたモデル名を使用
+        model = genai.GenerativeModel(GEMINI_MODEL_NAME)
         
         prompt = f"""
         あなたは【非常に厳格な】英語の発音審査官です。
@@ -97,7 +103,8 @@ def evaluate_pronunciation(audio_bytes, target_sentence, api_key):
 def evaluate_meaning_jp(audio_bytes, target_word, target_meaning, api_key):
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        # 設定されたモデル名を使用
+        model = genai.GenerativeModel(GEMINI_MODEL_NAME)
         
         prompt = f"""
         あなたは英語教師です。
@@ -127,12 +134,13 @@ def evaluate_meaning_jp(audio_bytes, target_word, target_meaning, api_key):
     except Exception as e:
         return {"error": str(e)}
 
-# --- NEW 関数: Geminiによる英英定義判定 (英語回答) ---
+# --- 関数: Geminiによる英英定義判定 (英語回答) ---
 @st.cache_data(show_spinner=False)
 def evaluate_meaning_en(audio_bytes, target_word, target_def_en, api_key):
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        # 設定されたモデル名を使用
+        model = genai.GenerativeModel(GEMINI_MODEL_NAME)
         
         prompt = f"""
         あなたは英語教師です。
