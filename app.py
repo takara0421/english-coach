@@ -8,7 +8,7 @@ import os
 # --- 🛠️ 設定: ここでモデル名を一括指定します ---
 # 動作確認済み安定版: 'gemini-1.5-flash'
 # 開発者プレビュー版: 'gemini-2.0-flash-exp' (もしエラーが出る場合は 1.5-flash に戻してください)
-GEMINI_MODEL_NAME = 'gemini-2.0-flash-live' 
+GEMINI_MODEL_NAME = 'gemini-2.0-flash-lite' 
 
 # --- ページ設定 ---
 st.set_page_config(page_title="AI英会話コーチ", page_icon="🎙️")
