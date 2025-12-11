@@ -5,6 +5,63 @@ import json
 import random
 import os
 
+import time
+# ==========================================
+# 🛠️ 簡易モデル診断ツール (ここから貼り付け)
+# ==========================================
+# サイドバーにチェックボックスを追加
+if st.sidebar.checkbox("🔧 モデル接続テストモードを起動"):
+    st.title("🔌 Gemini Model Connection Check")
+    st.info("現在の環境 (Streamlit Cloud等) からアクセス可能なモデルを判定します。")
+    
+    # APIキーの取得 (既存のsecretsを利用)
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    if not api_key:
+        st.error("APIキーが見つかりません。")
+        st.stop()
+
+    genai.configure(api_key=api_key)
+    
+    # テスト対象のモデルリスト
+    target_models = [
+        "gemini-1.5-flash",       # 安定版 (本命)
+        "gemini-1.5-pro",         # 高性能版
+        "gemini-2.0-flash-exp",   # 次世代実験版
+        "gemini-2.0-flash-lite",  # エラーの原因 (確認用)
+        "gemini-2.0-flash",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+    ]
+    ]
+    ]
+    
+    if st.button("接続テスト開始"):
+        results = []
+        bar = st.progress(0)
+        
+        for i, model_name in enumerate(target_models):
+            try:
+                model = genai.GenerativeModel(model_name)
+                # 負荷をかけないよう "Hello" だけでテスト
+                response = model.generate_content("Hello", generation_config={"max_output_tokens": 5})
+                st.success(f"✅ {model_name}: 利用可能")
+            except Exception as e:
+                err_msg = str(e)
+                if "limit: 0" in err_msg:
+                    st.error(f"❌ {model_name}: 権限なし (Limit: 0) - Cloudからは使えません")
+                else:
+                    st.warning(f"⚠️ {model_name}: エラー ({err_msg[:20]}...)")
+            
+            time.sleep(1) # 連打防止
+            bar.progress((i + 1) / len(target_models))
+            
+    st.write("---")
+    st.caption("チェックが終わったら、サイドバーのチェックを外すと元のアプリに戻ります。")
+    st.stop() # 🛑 これがあるため、テスト中は下にある本編コードが実行されません
+# ==========================================
+# 🛠️ 簡易モデル診断ツール (ここまで)
+# ==========================================
+
 # --- 🛠️ 設定: ここでモデル名を一括指定します ---
 # 動作確認済み安定版: 'gemini-1.5-flash'
 # 開発者プレビュー版: 'gemini-2.0-flash-exp' (もしエラーが出る場合は 1.5-flash に戻してください)
