@@ -30,9 +30,7 @@ if st.sidebar.checkbox("🔧 モデル接続テストモードを起動"):
         "gemini-2.0-flash-lite",  # エラーの原因 (確認用)
         "gemini-2.0-flash",
         "gemini-2.5-flash",
-        "gemini-2.5-flash-lite",
-    ]
-    ]
+        "gemini-2.5-flash-lite"
     ]
     
     if st.button("接続テスト開始"):
