@@ -6,59 +6,7 @@ import random
 import os
 
 import time
-# ==========================================
-# 🛠️ 簡易モデル診断ツール (ここから貼り付け)
-# ==========================================
-# サイドバーにチェックボックスを追加
-if st.sidebar.checkbox("🔧 モデル接続テストモードを起動"):
-    st.title("🔌 Gemini Model Connection Check")
-    st.info("現在の環境 (Streamlit Cloud等) からアクセス可能なモデルを判定します。")
-    
-    # APIキーの取得 (既存のsecretsを利用)
-    api_key = st.secrets.get("GEMINI_API_KEY")
-    if not api_key:
-        st.error("APIキーが見つかりません。")
-        st.stop()
 
-    genai.configure(api_key=api_key)
-    
-    # テスト対象のモデルリスト
-    target_models = [
-        "gemini-1.5-flash",       # 安定版 (本命)
-        "gemini-1.5-pro",         # 高性能版
-        "gemini-2.0-flash-exp",   # 次世代実験版
-        "gemini-2.0-flash-lite",  # エラーの原因 (確認用)
-        "gemini-2.0-flash",
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-lite"
-    ]
-    
-    if st.button("接続テスト開始"):
-        results = []
-        bar = st.progress(0)
-        
-        for i, model_name in enumerate(target_models):
-            try:
-                model = genai.GenerativeModel(model_name)
-                # 負荷をかけないよう "Hello" だけでテスト
-                response = model.generate_content("Hello", generation_config={"max_output_tokens": 5})
-                st.success(f"✅ {model_name}: 利用可能")
-            except Exception as e:
-                err_msg = str(e)
-                if "limit: 0" in err_msg:
-                    st.error(f"❌ {model_name}: 権限なし (Limit: 0) - Cloudからは使えません")
-                else:
-                    st.warning(f"⚠️ {model_name}: エラー ({err_msg[:20]}...)")
-            
-            time.sleep(1) # 連打防止
-            bar.progress((i + 1) / len(target_models))
-            
-    st.write("---")
-    st.caption("チェックが終わったら、サイドバーのチェックを外すと元のアプリに戻ります。")
-    st.stop() # 🛑 これがあるため、テスト中は下にある本編コードが実行されません
-# ==========================================
-# 🛠️ 簡易モデル診断ツール (ここまで)
-# ==========================================
 
 # --- 🛠️ 設定: ここでモデル名を一括指定します ---
 # 動作確認済み安定版: 'gemini-1.5-flash'
@@ -72,7 +20,7 @@ st.set_page_config(page_title="AI英会話コーチ", page_icon="🎙️")
 st.markdown("""
     <style>
     .big-font { font-size: 24px !important; font-weight: bold; color: #1E88E5; }
-    .word-font { font-size: 20px; font-weight: bold; color: #2E7D32; margin-bottom: 5px; }
+    .word-font { font-size: 24px !important; font-weight: bold; color: #2E7D32; margin-bottom: 5px; }
     .def-font { font-size: 16px; font-style: italic; color: #555; margin-bottom: 10px; }
     .stAudio { width: 100%; }
     .stButton button { width: 100%; border-radius: 20px; }
@@ -127,7 +75,7 @@ def evaluate_pronunciation(audio_bytes, target_sentence, api_key):
         model = genai.GenerativeModel(GEMINI_MODEL_NAME)
         
         prompt = f"""
-        あなたは【非常に厳格な】英語の発音審査官です。
+        あなたは【とても優しく褒め上手な】英語の先生です。
         ユーザーが以下の英文を読み上げました。
         
         【お題】: "{target_sentence}"
@@ -136,7 +84,7 @@ def evaluate_pronunciation(audio_bytes, target_sentence, api_key):
         {{
             "transcription": "聞き取った英語",
             "score": 点数(0-100の数値),
-            "advice": "日本語での具体的で厳しいアドバイス。"
+            "advice": "日本語での具体的で丁寧なアドバイス。良い点はしっかり褒めて、改善点は優しく教えてあげてください。"
         }}
         """
         
@@ -228,6 +176,27 @@ def evaluate_meaning_en(audio_bytes, target_word, target_def_en, api_key):
         return {"error": str(e)}
 
 
+# --- 関数: AIヒント生成 ---
+@st.cache_data(show_spinner=False)
+def generate_ai_hint(target_word, target_def, api_key):
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(GEMINI_MODEL_NAME)
+        
+        prompt = f"""
+        Word: "{target_word}"
+        Definition: "{target_def}"
+        
+        Task: Provide 3 simple English keywords or concepts that are related to this word, to help someone explain it. 
+        Do not use the word itself or its direct derivatives.
+        For example, if the word is 'Apple', keywords could be 'Fruit, Red, Pie'.
+        Output format: Keyword1, Keyword2, Keyword3
+        """
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as e:
+        return "Hint not available"
+
 # --- メイン画面 ---
 st.title("🎙️ AI English Coach")
 
@@ -278,9 +247,27 @@ st.markdown("---")
 
 # --- B. 単語の意味チェック (英語) ---
 # word_enがある場合のみ表示
+# word_enがある場合のみ表示
 if q.get('word_en'):
     st.write("🇺🇸 **意味を「英語」で説明してみよう**")
-    st.caption(f"ヒント: {q.get('word_en')}") # 難易度調整のためヒントとして表示（隠してもOK）
+    
+    # ヒント機能 (AI生成)
+    hint_key = f"hint_content_{st.session_state.q_index}"
+    if hint_key not in st.session_state:
+        st.session_state[hint_key] = None
+
+    col_hint, col_ans = st.columns([1, 1])
+    with col_hint:
+        if st.button("💡 AIヒントを表示", key=f"btn_hint_{st.session_state.q_index}"):
+            with st.spinner("考えさせるヒントを生成中..."):
+                st.session_state[hint_key] = generate_ai_hint(q['word'], q.get('word_en'), api_key)
+    
+    if st.session_state[hint_key]:
+        st.info(f"**Keywords:** {st.session_state[hint_key]}")
+
+    with col_ans:
+        with st.expander("正解の定義を見る"):
+            st.write(q.get('word_en'))
     
     meaning_en_key = f"rec_meaning_en_q{st.session_state.q_index}"
     meaning_en_audio = st.audio_input("録音ボタンを押して、英語で意味を説明してください", key=meaning_en_key)
