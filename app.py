@@ -339,7 +339,6 @@ with st.sidebar:
         user_name = st.text_input("お名前 (History保存用)", value="Guest")
 
     st.info(f"現在のユーザー: **{user_name}** さん")
-    st.caption(f"History File: {os.path.abspath(HISTORY_FILE)}")
     st.divider()
     
     model_name = st.selectbox(
