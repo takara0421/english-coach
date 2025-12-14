@@ -454,7 +454,7 @@ with tab_practice:
 
         if meaning_jp_audio:
             st.spinner("日本語の意味を判定中... 🤔")
-            res_jp = evaluate_meaning_jp(meaning_jp_audio.read(), q.get('word'), q.get('word_jp'), api_key, model_name, use_vertex, vertex_creds, project_id)
+            res_jp = evaluate_meaning_jp(meaning_jp_audio.read(), q.get('word'), q.get('word_jp'), api_key, model_name)
             
             if "error" in res_jp:
                 st.error(f"エラー: {res_jp['error']}")
@@ -483,7 +483,7 @@ with tab_practice:
         with col_hint:
             if st.button("💡 AIヒントを表示", key=f"btn_hint_{st.session_state.q_index}"):
                 with st.spinner("考えさせるヒントを生成中..."):
-                    st.session_state[hint_key] = generate_ai_hint(q['word'], q.get('word_en'), api_key, model_name, use_vertex, vertex_creds, project_id)
+                    st.session_state[hint_key] = generate_ai_hint(q['word'], q.get('word_en'), api_key, model_name)
         
         if st.session_state[hint_key]:
             st.info(f"**Keywords:** {st.session_state[hint_key]}")
@@ -497,7 +497,7 @@ with tab_practice:
 
         if meaning_en_audio:
             st.spinner("英語の説明を判定中... 🤔")
-            res_en = evaluate_meaning_en(meaning_en_audio.read(), q.get('word'), q.get('word_en'), api_key, model_name, use_vertex, vertex_creds, project_id)
+            res_en = evaluate_meaning_en(meaning_en_audio.read(), q.get('word'), q.get('word_en'), api_key, model_name)
             
             if "error" in res_en:
                 st.error(f"エラー: {res_en['error']}")
@@ -532,7 +532,7 @@ with tab_practice:
     if audio_value:
         st.write("発音判定中... 🤖")
         
-        result = evaluate_pronunciation(audio_value.read(), q['en'], api_key, model_name, use_vertex, vertex_creds, project_id)
+        result = evaluate_pronunciation(audio_value.read(), q['en'], api_key, model_name)
         
         if "error" in result:
             st.error(f"エラー: {result['error']}")
