@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import google.generativeai as genai
 from gtts import gTTS
 import json
@@ -16,6 +17,19 @@ from google.oauth2.service_account import Credentials
 
 # --- ページ設定 ---
 st.set_page_config(page_title="AI英会話コーチ", page_icon="🎙️", layout="wide")
+
+# --- 自動スクロール用JS (次へ進んだ時にトップに戻る) ---
+if st.session_state.get('scroll_to_top'):
+    components.html(
+        f"""
+            <script>
+                window.parent.scrollTo({{top: 0, behavior: 'instant'}});
+            </script>
+        """,
+        height=0,
+        width=0,
+    )
+    st.session_state.scroll_to_top = False
 
 # --- 🔐 セキュリティ設定 (パスワード保護) ---
 def check_password():
@@ -780,6 +794,7 @@ with tab_practice:
             st.session_state.questions = smart_sort_questions(st.session_state.questions, history_df, user_name, None)
             st.session_state.q_index = 0
             st.session_state.q_turn += 1
+            st.session_state.scroll_to_top = True
             st.rerun()
 
     # 2. 覚えた (Easy) - 合格時のみ、またはスキップ時も
@@ -796,6 +811,7 @@ with tab_practice:
             st.session_state.questions = smart_sort_questions(st.session_state.questions, history_df, user_name, st.session_state.next_recommended_word)
             st.session_state.q_index = 0
             st.session_state.q_turn += 1
+            st.session_state.scroll_to_top = True
             st.rerun()
 
 # ==========================================
