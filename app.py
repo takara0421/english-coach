@@ -200,10 +200,17 @@ if 'questions' not in st.session_state:
         ]
     
     st.session_state.questions = questions_data
-    random.shuffle(st.session_state.questions)
+    # 初回はランダムではなく、スマートソート（履歴なし=ランダムに近い）
+    # ユーザー名がまだ決まっていない(sidebar前)なので、後で再ソートするフラグを立てるか、デフォルトでやる
+    # ここでは仮に空履歴でソート
+    st.session_state.questions = smart_sort_questions(st.session_state.questions, pd.DataFrame(), "Guest")
 
 if 'q_index' not in st.session_state:
     st.session_state.q_index = 0
+
+if 'current_user' not in st.session_state:
+    st.session_state.current_user = None
+
 
 # --- 関数: Geminiによる判定 (英語発音 - 英文) ---
 @st.cache_data(show_spinner=False)
@@ -333,6 +340,113 @@ def generate_ai_hint(target_word, target_def, api_key, model_name):
     except Exception as e:
         return "Hint not available"
 
+# --- 関数: 関連語の取得 (AI) ---
+@st.cache_data(show_spinner=False)
+def get_related_words_ai(target_word, api_key, model_name):
+    """
+    指定された単語の類義語・反意語をAIにリストアップさせる。
+    返り値: リスト ["word1", "word2", ...]
+    """
+    try:
+        prompt = f"""
+        Task: List 5 synonyms and 5 antonyms for the word "{target_word}".
+        Output ONLY the words, separated by commas. No labels like 'Synonyms:'.
+        Simple format: word1, word2, word3...
+        """
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(model_name)
+        response = model.generate_content(prompt)
+        
+        text = response.text.strip()
+        words = [w.strip().lower() for w in text.split(',')]
+        return words
+    except:
+        return []
+
+# --- 関数: スマート出題順ソート (SRS + 関連語) ---
+def smart_sort_questions(questions, history_df, user_name, next_recommended_word=None):
+    """
+    学習履歴とおすすめ単語に基づいて問題をソートする。
+    優先順位:
+    1. AIおすすめ単語 (関連語チェイン)
+    2. 新規・忘却・失敗した単語 (SRS Review Due)
+    3. まだ先の単語
+    """
+    user_history = pd.DataFrame()
+    if not history_df.empty and 'user' in history_df.columns:
+        user_history = history_df[history_df['user'] == user_name]
+    
+    now = datetime.now()
+    scored_questions = []
+    
+    for q in questions:
+        word = q['word']
+        priority = 0
+        
+        # 0. AIおすすめ単語ブースト
+        if next_recommended_word and word.lower() == next_recommended_word.lower():
+            priority += 999999 # 最優先
+            
+        else:
+            # SRSロジック
+            word_msgs = pd.DataFrame()
+            if not user_history.empty:
+                word_msgs = user_history[user_history['word'] == word]
+            
+            streak = 0
+            last_review = None
+            
+            if not word_msgs.empty:
+                # 日付降順
+                attempts = word_msgs.sort_values('timestamp', ascending=False)
+                last_review = attempts.iloc[0]['timestamp']
+                
+                # ストリーク計算
+                for _, row in attempts.iterrows():
+                    is_pass = row['is_correct']
+                    
+                    # 自己評価や発音スコアの考慮
+                    if row['action'] == 'Pronunciation' and row['score'] < 80:
+                        is_pass = False
+                    if row['action'] == 'SelfRating' and row['detail'] == 'Hard':
+                        is_pass = False
+                        
+                    if is_pass:
+                        streak += 1
+                    else:
+                        break # 連続正解ストップ
+            
+            # 間隔（日数）の決定
+            if streak == 0: interval = 0
+            elif streak == 1: interval = 1
+            elif streak == 2: interval = 3
+            elif streak == 3: interval = 7
+            elif streak == 4: interval = 14
+            else: interval = 30
+            
+            # 優先度（どれくらい期限を過ぎているか）
+            if last_review is None:
+                # 未学習: 優先度高めだが、おすすめよりは下
+                priority = 1000 + random.random()
+            else:
+                try:
+                    # timestampがdatetime型であることを確認
+                    if not isinstance(last_review, datetime):
+                        last_review = pd.to_datetime(last_review)
+                        
+                    days_since = (now - last_review).total_seconds() / 86400
+                    # (経過日数 - 間隔) がプラスなら復習時期
+                    priority = days_since - interval
+                except:
+                    priority = 1000 # エラー時は未学習扱い
+        
+        q['priority'] = priority
+        scored_questions.append(q)
+        
+    # 優先度が高い順にソート
+    scored_questions.sort(key=lambda x: x['priority'], reverse=True)
+    return scored_questions
+
 # --- サイドバー: ユーザー設定 ---
 with st.sidebar:
     st.header("👤 ユーザー設定")
@@ -361,6 +475,19 @@ with st.sidebar:
         user_name = st.text_input("お名前 (History保存用)", value="Guest")
 
     st.info(f"現在のユーザー: **{user_name}** さん")
+    
+    # ユーザーが切り替わったら問題を再ソート
+    if st.session_state.current_user != user_name:
+        st.session_state.current_user = user_name
+        history_df = load_history()
+        # 次の単語のリセット
+        if 'next_recommended_word' in st.session_state:
+            del st.session_state['next_recommended_word']
+            
+        st.session_state.questions = smart_sort_questions(st.session_state.questions, history_df, user_name)
+        st.session_state.q_index = 0
+        st.rerun()
+
     st.divider()
     
     model_name = st.selectbox(
@@ -563,18 +690,59 @@ with tab_practice:
             with st.container():
                 st.info(f"**Japanese:** {q.get('jp', '---')}")
 
-            # アドバイスと次へボタン
+            # アドバイスと次へ (自己評価付き)
+            st.subheader("自己評価 & 次へ")
+            
+            col_next1, col_next2 = st.columns(2)
+            
+            # ロジック: ボタンが押されたら -> ログ保存 -> 関連語検索 -> 再ソート -> リロード
+            
+            # 1. まだ不安 (Hard)
+            with col_next1:
+                if st.button("😫 まだ不安 (Hard/Retry)", key=f"btn_hard_{st.session_state.q_index}", type="secondary"):
+                    save_log(user_name, q['word'], "SelfRating", score=0, is_correct=False, detail="Hard")
+                    
+                    # 関連語検索はスキップ（苦手克服を優先）
+                    # 再ソートして次へ
+                    history_df = load_history()
+                    st.session_state.questions = smart_sort_questions(st.session_state.questions, history_df, user_name, None)
+                    st.session_state.q_index = 0
+                    st.rerun()
+
+            # 2. 覚えた (Easy) - 合格時のみ、またはスキップ時も
+            with col_next2:
+                # 発音が合格点、またはユーザーが自信ありと判断した場合
+                if st.button("😎 覚えた！ (Easy/Next)", key=f"btn_easy_{st.session_state.q_index}", type="primary"):
+                    save_log(user_name, q['word'], "SelfRating", score=100, is_correct=True, detail="Easy")
+                    
+                    # 関連語を検索して次の出題候補にする (Dynamic Chaining)
+                    with st.spinner("AIが次の関連語を選んでいます..."):
+                        related_words = get_related_words_ai(q['word'], api_key, model_name)
+                        
+                        # 候補の中から、問題リストにあるものを探す
+                        next_word_candidate = None
+                        existing_words = {item['word'].lower() for item in st.session_state.questions}
+                        
+                        for rw in related_words:
+                            if rw in existing_words and rw != q['word'].lower():
+                                next_word_candidate = rw
+                                break
+                        
+                        st.session_state.next_recommended_word = next_word_candidate
+                        if next_word_candidate:
+                            st.toast(f"🔗 関連語が見つかりました: {next_word_candidate}")
+                    
+                    # 再ソート
+                    history_df = load_history()
+                    st.session_state.questions = smart_sort_questions(st.session_state.questions, history_df, user_name, st.session_state.next_recommended_word)
+                    st.session_state.q_index = 0
+                    st.rerun()
+
+            # AI判定のメッセージ表示
             if result['score'] >= 80:
                 st.success(f"**Excellent!**\n{result['advice']}")
-                if st.button("次の問題へ (Next) ->", type="primary"):
-                    st.session_state.q_index += 1
-                    st.rerun()
             else:
                 st.error(f"**Try Again...**\n{result['advice']}")
-                
-                if st.button("今回はスキップする"):
-                    st.session_state.q_index += 1
-                    st.rerun()
 
 # ==========================================
 # タブ2: 学習履歴 (History)
