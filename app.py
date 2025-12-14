@@ -10,10 +10,7 @@ import time
 import gspread
 from google.oauth2.service_account import Credentials
 
-# --- 🛠️ 設定: ここでモデル名を一括指定します ---
-# 動作確認済み安定版: 'gemini-1.5-flash'
-# 開発者プレビュー版: 'gemini-2.0-flash-exp' (もしエラーが出る場合は 1.5-flash に戻してください)
-GEMINI_MODEL_NAME = 'gemini-2.5-flash-lite' 
+# --- 🛠️ 設定: モデル名はサイドバーで選択します --- 
 
 # --- ページ設定 ---
 st.set_page_config(page_title="AI英会話コーチ", page_icon="🎙️", layout="wide")
@@ -163,11 +160,11 @@ if 'q_index' not in st.session_state:
 
 # --- 関数: Geminiによる判定 (英語発音 - 英文) ---
 @st.cache_data(show_spinner=False)
-def evaluate_pronunciation(audio_bytes, target_sentence, api_key):
+def evaluate_pronunciation(audio_bytes, target_sentence, api_key, model_name):
     try:
         genai.configure(api_key=api_key)
         # 設定されたモデル名を使用
-        model = genai.GenerativeModel(GEMINI_MODEL_NAME)
+        model = genai.GenerativeModel(model_name)
         
         prompt = f"""
         あなたは【とても優しく褒め上手な】英語の先生です。
@@ -198,11 +195,11 @@ def evaluate_pronunciation(audio_bytes, target_sentence, api_key):
 
 # --- 関数: Geminiによる意味判定 (日本語回答) ---
 @st.cache_data(show_spinner=False)
-def evaluate_meaning_jp(audio_bytes, target_word, target_meaning, api_key):
+def evaluate_meaning_jp(audio_bytes, target_word, target_meaning, api_key, model_name):
     try:
         genai.configure(api_key=api_key)
         # 設定されたモデル名を使用
-        model = genai.GenerativeModel(GEMINI_MODEL_NAME)
+        model = genai.GenerativeModel(model_name)
         
         prompt = f"""
         あなたは英語教師です。
@@ -234,11 +231,11 @@ def evaluate_meaning_jp(audio_bytes, target_word, target_meaning, api_key):
 
 # --- 関数: Geminiによる英英定義判定 (英語回答) ---
 @st.cache_data(show_spinner=False)
-def evaluate_meaning_en(audio_bytes, target_word, target_def_en, api_key):
+def evaluate_meaning_en(audio_bytes, target_word, target_def_en, api_key, model_name):
     try:
         genai.configure(api_key=api_key)
         # 設定されたモデル名を使用
-        model = genai.GenerativeModel(GEMINI_MODEL_NAME)
+        model = genai.GenerativeModel(model_name)
         
         prompt = f"""
         あなたは英語教師です。
@@ -273,10 +270,10 @@ def evaluate_meaning_en(audio_bytes, target_word, target_def_en, api_key):
 
 # --- 関数: AIヒント生成 ---
 @st.cache_data(show_spinner=False)
-def generate_ai_hint(target_word, target_def, api_key):
+def generate_ai_hint(target_word, target_def, api_key, model_name):
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(GEMINI_MODEL_NAME)
+        model = genai.GenerativeModel(model_name)
         
         prompt = f"""
         Word: "{target_word}"
@@ -321,6 +318,28 @@ with st.sidebar:
 
     st.info(f"現在のユーザー: **{user_name}** さん")
     st.caption(f"History File: {os.path.abspath(HISTORY_FILE)}")
+    st.divider()
+    
+    st.header("🤖 AIモデル設定")
+    model_name = st.selectbox(
+        "使用するモデル",
+        ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"],
+        index=0
+    )
+    
+    if st.button("🛠️ 接続テスト (Test Connection)"):
+        api_key_test = st.secrets.get("GEMINI_API_KEY")
+        if not api_key_test:
+            st.error("APIキーが設定されていません")
+        else:
+            try:
+                genai.configure(api_key=api_key_test)
+                model_test = genai.GenerativeModel(model_name)
+                response_test = model_test.generate_content("Hello")
+                st.success(f"接続成功！\nResponse: {response_test.text}")
+            except Exception as e:
+                st.error(f"接続エラー: {e}")
+
     st.divider()
     
     api_key = st.secrets.get("GEMINI_API_KEY")
@@ -392,7 +411,7 @@ with tab_practice:
 
         if meaning_jp_audio:
             st.spinner("日本語の意味を判定中... 🤔")
-            res_jp = evaluate_meaning_jp(meaning_jp_audio.read(), q.get('word'), q.get('word_jp'), api_key)
+            res_jp = evaluate_meaning_jp(meaning_jp_audio.read(), q.get('word'), q.get('word_jp'), api_key, model_name)
             
             if "error" in res_jp:
                 st.error(f"エラー: {res_jp['error']}")
@@ -421,7 +440,7 @@ with tab_practice:
         with col_hint:
             if st.button("💡 AIヒントを表示", key=f"btn_hint_{st.session_state.q_index}"):
                 with st.spinner("考えさせるヒントを生成中..."):
-                    st.session_state[hint_key] = generate_ai_hint(q['word'], q.get('word_en'), api_key)
+                    st.session_state[hint_key] = generate_ai_hint(q['word'], q.get('word_en'), api_key, model_name)
         
         if st.session_state[hint_key]:
             st.info(f"**Keywords:** {st.session_state[hint_key]}")
@@ -435,7 +454,7 @@ with tab_practice:
 
         if meaning_en_audio:
             st.spinner("英語の説明を判定中... 🤔")
-            res_en = evaluate_meaning_en(meaning_en_audio.read(), q.get('word'), q.get('word_en'), api_key)
+            res_en = evaluate_meaning_en(meaning_en_audio.read(), q.get('word'), q.get('word_en'), api_key, model_name)
             
             if "error" in res_en:
                 st.error(f"エラー: {res_en['error']}")
@@ -470,7 +489,7 @@ with tab_practice:
     if audio_value:
         st.write("発音判定中... 🤖")
         
-        result = evaluate_pronunciation(audio_value.read(), q['en'], api_key)
+        result = evaluate_pronunciation(audio_value.read(), q['en'], api_key, model_name)
         
         if "error" in result:
             st.error(f"エラー: {result['error']}")
