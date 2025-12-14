@@ -17,6 +17,34 @@ from vertexai.generative_models import GenerativeModel as VertexGenerativeModel,
 # --- ページ設定 ---
 st.set_page_config(page_title="AI英会話コーチ", page_icon="🎙️", layout="wide")
 
+# --- 🔐 セキュリティ設定 (パスワード保護) ---
+def check_password():
+    """パスワード認証が成功した場合のみTrueを返す"""
+    if "password_correct" not in st.session_state:
+        st.session_state.password_correct = False
+
+    if st.session_state.password_correct:
+        return True
+
+    st.markdown("## 🔒 アクセス制限")
+    st.info("課金保護のため、パスワード制限をかけています。")
+    
+    password = st.text_input("パスワードを入力してください", type="password")
+    
+    # Secretsに設定がない場合のデフォルトパスワード: "english2024"
+    correct_password = st.secrets.get("APP_PASSWORD", "english2024")
+
+    if st.button("ログイン"):
+        if password == correct_password:
+            st.session_state.password_correct = True
+            st.rerun()
+        else:
+            st.error("パスワードが違います")
+    return False
+
+if not check_password():
+    st.stop()
+
 # --- CSS (スマホで見やすくするためのデザイン) ---
 st.markdown("""
     <style>
