@@ -820,7 +820,8 @@ with tab_history:
                 avg_score = pron_df['score'].mean() if not pron_df.empty else 0
                 st.metric("Avg Pronunciation Score", f"{avg_score:.1f}")
             with col_m3:
-                correct_count = user_df['is_correct'].sum()
+                # 修正: 'is_correct'が文字列の場合も考慮して集計
+                correct_count = user_df['is_correct'].apply(lambda x: x.lower() == 'true' if isinstance(x, str) else bool(x)).sum()
                 st.metric("Total Correct/Pass", f"{correct_count}")
 
             # グラフ表示 (発音スコアの推移)
