@@ -77,17 +77,31 @@ def get_gsheet_client():
 
 def load_history():
     """履歴を読み込む (Google Sheets優先)"""
+    expected_headers = ["timestamp", "user", "word", "action", "score", "is_correct", "detail"]
+    
     client = get_gsheet_client()
     if client:
         try:
             sheet = client.open(SHEET_NAME).sheet1
-            data = sheet.get_all_records()
-            if data:
-                df = pd.DataFrame(data)
+            all_values = sheet.get_all_values()
+            
+            if all_values:
+                # 1行目がヘッダーかどうか確認
+                if all_values[0] == expected_headers:
+                    # 1行目がヘッダーなら、2行目以降をデータとして作成
+                    df = pd.DataFrame(all_values[1:], columns=expected_headers)
+                else:
+                    # 1行目がヘッダーでない（データ）なら、全行をデータとして使い、ヘッダーを付与
+                    df = pd.DataFrame(all_values, columns=expected_headers)
+                
                 # 日付変換
                 if 'timestamp' in df.columns:
-                     df['timestamp'] = pd.to_datetime(df['timestamp'])
+                     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
                 return df
+                
+            # データが空の場合はヘッダーのみのDFを返す
+            return pd.DataFrame(columns=expected_headers)
+
         except gspread.exceptions.SpreadsheetNotFound:
             pass # シートがない、設定されていない場合はスルー
         except Exception:
@@ -100,7 +114,7 @@ def load_history():
             return df
         except ValueError:
             pass
-    return pd.DataFrame()
+    return pd.DataFrame(columns=expected_headers)
 
 def save_log(user_name, word, action_type, score=None, is_correct=None, detail=""):
     """学習履歴を保存する (Google Sheets優先)"""
