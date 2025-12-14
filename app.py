@@ -345,10 +345,8 @@ with st.sidebar:
     model_name = st.selectbox(
         "使用するモデル",
         [
-            "gemini-2.0-flash-lite-preview-02-05", # リクエストされたFlashLite
-            "gemini-2.0-flash", 
-            "gemini-1.5-flash",
-            "gemini-1.5-pro",
+            "gemini-2.5-flash-lite", # リクエストされたFlashLite
+            "gemini-2.5-flash", 
         ],
         index=0
     )
