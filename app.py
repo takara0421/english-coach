@@ -7,6 +7,8 @@ import os
 import pandas as pd
 from datetime import datetime
 import time
+import gspread
+from google.oauth2.service_account import Credentials
 
 # --- 🛠️ 設定: ここでモデル名を一括指定します ---
 # 動作確認済み安定版: 'gemini-1.5-flash'
@@ -28,40 +30,97 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 履歴管理用の関数 ---
+# --- 履歴管理用の関数 (Google Sheets対応版) ---
 HISTORY_FILE = 'history.json'
+SHEET_NAME = 'EnglishCoach_Data' # ユーザーに作成してもらうスプレッドシート名
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+
+def get_gsheet_client():
+    """st.secretsから認証情報を読み込んでgspreadクライアントを返す"""
+    if "gcp_service_account" not in st.secrets:
+        return None
+    try:
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+        return gspread.authorize(creds)
+    except Exception as e:
+        st.error(f"Google Sheets認証エラー: {e}")
+        return None
 
 def load_history():
-    """履歴ファイルを読み込んでDataFrameで返す"""
+    """履歴を読み込む (Google Sheets優先)"""
+    client = get_gsheet_client()
+    if client:
+        try:
+            sheet = client.open(SHEET_NAME).sheet1
+            data = sheet.get_all_records()
+            if data:
+                df = pd.DataFrame(data)
+                # 日付変換
+                if 'timestamp' in df.columns:
+                     df['timestamp'] = pd.to_datetime(df['timestamp'])
+                return df
+        except gspread.exceptions.SpreadsheetNotFound:
+            pass # シートがない、設定されていない場合はスルー
+        except Exception:
+            pass
+
+    # フォールバック: ローカルJSON
     if os.path.exists(HISTORY_FILE):
         try:
             df = pd.read_json(HISTORY_FILE, orient='records', convert_dates=['timestamp'])
             return df
         except ValueError:
-            return pd.DataFrame()
+            pass
     return pd.DataFrame()
 
 def save_log(user_name, word, action_type, score=None, is_correct=None, detail=""):
-    """学習履歴を保存する"""
+    """学習履歴を保存する (Google Sheets優先)"""
     new_data = {
         "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         "user": user_name,
         "word": word,
-        "action": action_type, # 'pronunciation', 'meaning_jp', 'meaning_en'
-        "score": score,
-        "is_correct": is_correct,
+        "action": action_type,
+        "score": score if score is not None else 0, # None対策
+        "is_correct": bool(is_correct), # bool変換
         "detail": detail
     }
     
-    df = load_history()
+    # 1. Google Sheets
+    client = get_gsheet_client()
+    if client:
+        try:
+            sheet = client.open(SHEET_NAME).sheet1
+            # ヘッダーがなければ書き込む
+            if not sheet.get_all_values():
+                 sheet.append_row(list(new_data.keys()))
+            sheet.append_row(list(new_data.values()))
+            return # クラウド保存できれば終了
+        except gspread.exceptions.SpreadsheetNotFound:
+            st.warning(f"⚠️ スプレッドシート '{SHEET_NAME}' が見つかりません。")
+        except Exception as e:
+            print(f"GSheet save error: {e}")
+
+    # 2. ローカル (フォールバック)
+    df = load_history() # ローカルファイルから読み込みなおす挙動になる(GSheet失敗時)
+    # ここは単純化のため、ファイル直接読み書きに戻す
+    local_df = pd.DataFrame()
+    if os.path.exists(HISTORY_FILE):
+        try:
+            local_df = pd.read_json(HISTORY_FILE, orient='records', convert_dates=['timestamp'])
+        except:
+            pass
+            
     new_df = pd.DataFrame([new_data])
-    
-    # 既存のデータフレームと結合
-    if not df.empty:
-        df = pd.concat([df, new_df], ignore_index=True)
+    if not local_df.empty:
+        local_df = pd.concat([local_df, new_df], ignore_index=True)
     else:
-        df = new_df
+        local_df = new_df
         
-    df.to_json(HISTORY_FILE, orient='records', force_ascii=False, indent=4)
+    local_df.to_json(HISTORY_FILE, orient='records', force_ascii=False, indent=4)
 
 # --- セッション状態の初期化 ---
 if 'questions' not in st.session_state:
@@ -270,6 +329,30 @@ with st.sidebar:
         if not api_key:
             st.error("⚠️ APIキーが必要です")
             st.stop()
+    st.divider()
+    with st.expander("☁️ データ保存設定 (Google Sheets)"):
+        if "gcp_service_account" in st.secrets:
+            st.success("✅ 連携済み (Google Sheets)")
+        else:
+            st.warning("⚠️ 未連携 (データは一時保存のみ)")
+            st.markdown("""
+            **〜設定手順〜**
+            1. [Google Cloud Console](https://console.cloud.google.com/)でプロジェクト作成
+            2. **Google Sheets API** と **Google Drive API** を有効化
+            3. **サービスアカウント**を作成し「キー(JSON)」をダウンロード
+            4. Googleスプレッドシートを新規作成し、名前を `EnglishCoach_Data` にする
+            5. そのシートの「共有」設定で、サービスアカウントのメールアドレス (`xxx@yyy.iam.gserviceaccount.com`) を編集者として追加
+            6. Streamlit Cloudの **Settings > Secrets** にJSONの中身をコピペ（以下の形式）
+            """)
+            st.code("""
+[gcp_service_account]
+type = "service_account"
+project_id = "..."
+private_key_id = "..."
+private_key = "..."
+client_email = "..."
+...
+            """, language="toml")
 
 # --- メイン画面 ---
 st.title("🎙️ AI English Coach")
