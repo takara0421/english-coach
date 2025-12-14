@@ -785,22 +785,8 @@ with tab_practice:
         if st.button("😎 覚えた！ (Easy/Next)", key=f"btn_easy_turn{st.session_state.q_turn}", type="primary"):
             save_log(user_name, q['word'], "SelfRating", score=100, is_correct=True, detail="Easy")
             
-            # 関連語を検索して次の出題候補にする (Dynamic Chaining)
-            with st.spinner("AIが次の関連語を選んでいます..."):
-                related_words = get_related_words_ai(q['word'], api_key, model_name)
-                
-                # 候補の中から、問題リストにあるものを探す
-                next_word_candidate = None
-                existing_words = {item['word'].lower() for item in st.session_state.questions}
-                
-                for rw in related_words:
-                    if rw in existing_words and rw != q['word'].lower():
-                        next_word_candidate = rw
-                        break
-                
-                st.session_state.next_recommended_word = next_word_candidate
-                if next_word_candidate:
-                    st.toast(f"🔗 関連語が見つかりました: {next_word_candidate}")
+            # 関連語検索 (Dynamic Chaining) は動作高速化のためにスキップ
+            st.session_state.next_recommended_word = None
             
             # 再ソート
             history_df = load_history()
