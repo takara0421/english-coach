@@ -654,9 +654,7 @@ with tab_practice:
 
     # --- B. 単語の意味チェック (英語) ---
     # word_enがある場合のみ表示
-    if q.get('word_en'):
-        st.write("🇺🇸 **意味を「英語」で説明してみよう**")
-        
+
     # word_enがある場合のみ表示
     if q.get('word_en'):
         st.write("🇺🇸 **意味を「英語」で説明してみよう**")
@@ -704,7 +702,7 @@ with tab_practice:
     st.write("🗣️ **この英文を音読してください**")
     
     # 英文の日本語訳をチラ見する機能
-    with st.expander("正解を表示 (Show Answer)"):
+    with st.expander("日本語訳を表示 (Show Translation)"):
         st.write(q.get('jp', '---'))
         
     audio_key = f"rec_q_turn{st.session_state.q_turn}"
