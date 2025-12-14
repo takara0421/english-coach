@@ -368,16 +368,19 @@ def evaluate_pronunciation(audio_bytes, target_sentence, api_key, model_name):
 def evaluate_meaning_jp(audio_bytes, target_word, target_meaning, api_key, model_name):
     try:
         prompt = f"""
-        あなたは英語教師です。
+        あなたは【採点の厳しい】英語教師です。
         ユーザーは英単語 "{target_word}" の日本語訳を音声で入力しました。
         想定される正解は "{target_meaning}" です。
-        一字一句同じでなくても、類義語や文脈として正しい意味であれば正解としてください。
+        
+        【指示】
+        - 一字一句同じである必要はありません。類義語や、意味の本質が合っていれば正解としてください。
+        - しかし、少しでもニュアンスが異なる場合や、曖昧な回答は厳しく「不正解(false)」にしてください。
 
         以下のJSON形式のみで評価を出力してください:
         {{
             "transcription": "聞き取った日本語",
             "is_correct": true または false (ブール値),
-            "comment": "判定コメント（正解なら褒める、不正解なら惜しい点や正解を教える）"
+            "comment": "判定コメント（正解なら簡潔に。不正解なら、なぜ違うのかを厳しく指摘してください）"
         }}
         """
 
@@ -401,19 +404,20 @@ def evaluate_meaning_jp(audio_bytes, target_word, target_meaning, api_key, model
 def evaluate_meaning_en(audio_bytes, target_word, target_def_en, api_key, model_name):
     try:
         prompt = f"""
-        あなたは英語教師です。
+        あなたは【採点の厳しい】英語教師です。
         ユーザーは英単語 "{target_word}" の意味を「英語」で説明しようとしています。
         
         【正解の定義】: "{target_def_en}"
         
-        ユーザーの音声を聞き取り、その説明が単語の意味として（大まかにでも）合っているか判定してください。
-        完全に定義通りでなくても、その単語の概念を説明できていれば正解としてください。
+        【指示】
+        - 定義を一字一句暗記している必要はありません。その単語の「核心的な意味」を捉えられていれば正解です。
+        - しかし、説明が曖昧だったり、文法ミスで意味が伝わらない場合は厳しく「不正解(false)」にしてください。
 
         以下のJSON形式のみで評価を出力してください:
         {{
             "transcription": "聞き取った英語",
             "is_correct": true または false (ブール値),
-            "comment": "日本語でのフィードバック（ユーザーの英語の良い点や、もっと良い表現など）"
+            "comment": "日本語でのフィードバック（改善点を厳しく具体的に指摘してください）"
         }}
         """
 
