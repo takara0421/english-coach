@@ -646,9 +646,7 @@ with tab_practice:
                     st.error(f"❌ **不正解...** (聞き取り: {res_jp['transcription']})\n\n{res_jp['comment']}")
                     save_log(user_name, q['word'], "Japanese Meaning", score=0, is_correct=False, detail=res_jp['transcription'])
                 
-                # 正解を表示 (Expanderでオンオフ可能に)
-                with st.expander("💡 正解を表示 (Show Answer)"):
-                    st.info(f"{q.get('word_jp')}")
+
 
     st.markdown("---")
 
@@ -679,9 +677,7 @@ with tab_practice:
                     st.error(f"❌ **Not quite...** (You said: \"{res_en['transcription']}\")\n\n{res_en['comment']}")
                     save_log(user_name, q['word'], "English Definition", score=0, is_correct=False, detail=res_en['transcription'])
 
-                # 正解を表示 (Expanderでオンオフ可能に)
-                with st.expander("💡 正解の定義を表示 (Show Definition)"):
-                    st.info(f"{q.get('word_en')}")
+
 
         st.markdown("---")
 
@@ -729,10 +725,7 @@ with tab_practice:
             # 履歴保存
             save_log(user_name, q['word'], "Pronunciation", score=result['score'], is_correct=(result['score'] >= 80), detail=f"Transcription: {result['transcription']}")
 
-            # 日本語訳を表示 (Expanderでオンオフ可能に)
-            with st.container():
-                with st.expander("💡 日本語訳を表示 (Show Translation)"):
-                    st.info(f"{q.get('jp', '---')}")
+
 
             # (自己評価ボタンを下に移動しました)
 
