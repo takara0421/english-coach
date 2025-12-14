@@ -861,6 +861,7 @@ with tab_history:
                 st.metric("⬜ 未学習 (Unlearned)", f"{unlearned_count}")
 
             # グラフ表示 (発音スコアの推移)
+            pron_df = user_df[user_df['action'] == 'Pronunciation']
             if not pron_df.empty:
                 st.subheader("📈 Pronunciation Score Progress")
                 # 日時でソートしてグラフ化
