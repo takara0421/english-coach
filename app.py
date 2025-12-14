@@ -360,19 +360,15 @@ def evaluate_pronunciation(audio_bytes, target_sentence, api_key, model_name):
         model = genai.GenerativeModel(model_name)
         
         prompt = f"""
-        あなたは【発音に厳しいプロの】英語コーチです。
-        ユーザーが以下の英文を読み上げました。
+        Role: Strict English Coach.
+        Task: Evaluate pronunciation of the audio against the target sentence.
+        Target: "{target_sentence}"
         
-        【お題】: "{target_sentence}"
-        
-        あなたは、ネイティブスピーカーの基準で厳密に審査を行います。
-        些細な発音のズレやアクセントの間違いも見逃さず、厳しく採点してください。
-    
-        以下のJSON形式のみで評価を出力してください:
+        Output JSON only:
         {{
-            "transcription": "聞き取った英語",
-            "score": 点数(0-100の数値。厳しめに判定してください),
-            "advice": "日本語でのアドバイス。褒めるよりも、改善すべき点（発音、イントネーション、リズムなど）を具体的かつ論理的に指摘してください。"
+            "transcription": "Transcribed speech",
+            "score": 0-100 (Integer, Strict),
+            "advice": "Brief advice in Japanese (max 2 sentences) focusing on improvement."
         }}
         """
         response = model.generate_content([
@@ -393,19 +389,16 @@ def evaluate_pronunciation(audio_bytes, target_sentence, api_key, model_name):
 def evaluate_meaning_jp(audio_bytes, target_word, target_meaning, api_key, model_name):
     try:
         prompt = f"""
-        あなたは【採点の厳しい】英語教師です。
-        ユーザーは英単語 "{target_word}" の日本語訳を音声で入力しました。
-        想定される正解は "{target_meaning}" です。
+        Role: Strict Teacher.
+        Task: Check if user's Japanese audio matches the meaning of English word "{target_word}".
+        Expected Meaning: "{target_meaning}"
+        Criteria: Strict.
         
-        【指示】
-        - 一字一句同じである必要はありません。類義語や、意味の本質が合っていれば正解としてください。
-        - しかし、少しでもニュアンスが異なる場合や、曖昧な回答は厳しく「不正解(false)」にしてください。
-
-        以下のJSON形式のみで評価を出力してください:
+        Output JSON only:
         {{
-            "transcription": "聞き取った日本語",
-            "is_correct": true または false (ブール値),
-            "comment": "判定コメント（正解なら簡潔に。不正解なら、なぜ違うのかを厳しく指摘してください）"
+            "transcription": "Transcribed Japanese",
+            "is_correct": boolean,
+            "comment": "Brief feedback in Japanese (max 1-2 sentences)."
         }}
         """
 
@@ -429,20 +422,16 @@ def evaluate_meaning_jp(audio_bytes, target_word, target_meaning, api_key, model
 def evaluate_meaning_en(audio_bytes, target_word, target_def_en, api_key, model_name):
     try:
         prompt = f"""
-        あなたは【採点の厳しい】英語教師です。
-        ユーザーは英単語 "{target_word}" の意味を「英語」で説明しようとしています。
+        Role: Strict Teacher.
+        Task: Check if user's English explanation matches the meaning of "{target_word}".
+        Definition: "{target_def_en}"
+        Criteria: Strict on core meaning.
         
-        【正解の定義】: "{target_def_en}"
-        
-        【指示】
-        - 定義を一字一句暗記している必要はありません。その単語の「核心的な意味」を捉えられていれば正解です。
-        - しかし、説明が曖昧だったり、文法ミスで意味が伝わらない場合は厳しく「不正解(false)」にしてください。
-
-        以下のJSON形式のみで評価を出力してください:
+        Output JSON only:
         {{
-            "transcription": "聞き取った英語",
-            "is_correct": true または false (ブール値),
-            "comment": "日本語でのフィードバック（改善点を厳しく具体的に指摘してください）"
+            "transcription": "Transcribed English",
+            "is_correct": boolean,
+            "comment": "Brief feedback in Japanese (max 2 sentences)."
         }}
         """
 
