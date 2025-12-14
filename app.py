@@ -372,12 +372,20 @@ def smart_sort_questions(questions, history_df, user_name, next_recommended_word
     2. 新規・忘却・失敗した単語 (SRS Review Due)
     3. まだ先の単語
     """
-    user_history = pd.DataFrame()
-    if not history_df.empty and 'user' in history_df.columns:
-        user_history = history_df[history_df['user'] == user_name]
-    
     now = datetime.now()
     scored_questions = []
+
+    # 履歴データを辞書化して高速化 (O(N)対策)
+    # word -> list of history records
+    word_history_map = {}
+    
+    if not history_df.empty and 'user' in history_df.columns:
+        user_history = history_df[history_df['user'] == user_name]
+        for record in user_history.to_dict('records'):
+            w = record['word']
+            if w not in word_history_map:
+                word_history_map[w] = []
+            word_history_map[w].append(record)
     
     for q in questions:
         word = q['word']
@@ -389,32 +397,43 @@ def smart_sort_questions(questions, history_df, user_name, next_recommended_word
             
         else:
             # SRSロジック
-            word_msgs = pd.DataFrame()
-            if not user_history.empty:
-                word_msgs = user_history[user_history['word'] == word]
+            # 辞書から履歴を取得 (高速)
+            records = word_history_map.get(word, [])
             
             streak = 0
             last_review = None
             
-            if not word_msgs.empty:
-                # 日付降順
-                attempts = word_msgs.sort_values('timestamp', ascending=False)
-                last_review = attempts.iloc[0]['timestamp']
+            if records:
+                # 日付降順に並び替え (辞書化してるのでここでソートが必要だが、レコード数は少ないはず)
+                # stringのtimestampをdatetimeに変換してソート
+                for r in records:
+                    if not isinstance(r['timestamp'], datetime):
+                         try:
+                             r['timestamp'] = pd.to_datetime(r['timestamp'])
+                         except:
+                             pass
                 
-                # ストリーク計算
-                for _, row in attempts.iterrows():
-                    is_pass = row['is_correct']
+                # timestampを持つものだけでソート
+                valid_records = [r for r in records if isinstance(r['timestamp'], datetime)]
+                valid_records.sort(key=lambda x: x['timestamp'], reverse=True)
+                
+                if valid_records:
+                    last_review = valid_records[0]['timestamp']
                     
-                    # 自己評価や発音スコアの考慮
-                    if row['action'] == 'Pronunciation' and row['score'] < 80:
-                        is_pass = False
-                    if row['action'] == 'SelfRating' and row['detail'] == 'Hard':
-                        is_pass = False
+                    # ストリーク計算
+                    for row in valid_records:
+                        is_pass = row['is_correct']
                         
-                    if is_pass:
-                        streak += 1
-                    else:
-                        break # 連続正解ストップ
+                        # 自己評価や発音スコアの考慮
+                        if row['action'] == 'Pronunciation' and row['score'] < 80:
+                            is_pass = False
+                        if row['action'] == 'SelfRating' and row['detail'] == 'Hard':
+                            is_pass = False
+                            
+                        if is_pass:
+                            streak += 1
+                        else:
+                            break # 連続正解ストップ
             
             # 間隔（日数）の決定
             if streak == 0: interval = 0
@@ -430,15 +449,11 @@ def smart_sort_questions(questions, history_df, user_name, next_recommended_word
                 priority = 1000 + random.random()
             else:
                 try:
-                    # timestampがdatetime型であることを確認
-                    if not isinstance(last_review, datetime):
-                        last_review = pd.to_datetime(last_review)
-                        
-                    days_since = (now - last_review).total_seconds() / 86400
-                    # (経過日数 - 間隔) がプラスなら復習時期
-                    priority = days_since - interval
+                     days_since = (now - last_review).total_seconds() / 86400
+                     # (経過日数 - 間隔) がプラスなら復習時期
+                     priority = days_since - interval
                 except:
-                    priority = 1000 # エラー時は未学習扱い
+                     priority = 1000 # エラー時は未学習扱い
         
         q['priority'] = priority
         scored_questions.append(q)
@@ -486,6 +501,8 @@ with st.sidebar:
             
         st.session_state.questions = smart_sort_questions(st.session_state.questions, history_df, user_name)
         st.session_state.q_index = 0
+        if 'q_turn' not in st.session_state: st.session_state.q_turn = 0
+        st.session_state.q_turn += 1 # ターンを進めてキーを一新
         st.rerun()
 
     st.divider()
@@ -556,6 +573,10 @@ tab_practice, tab_history = st.tabs(["🔥 トレーニング (Practice)", "📊
 # タブ1: トレーニング (Practice)
 # ==========================================
 with tab_practice:
+    # ターン数の初期化（キーの重複回避用）
+    if 'q_turn' not in st.session_state:
+        st.session_state.q_turn = 0
+
     # 全問終了チェック
     if st.session_state.q_index >= len(st.session_state.questions):
         st.balloons()
@@ -563,6 +584,7 @@ with tab_practice:
         if st.button("もう一度最初から"):
             st.session_state.q_index = 0
             random.shuffle(st.session_state.questions)
+            st.session_state.q_turn += 1
             st.rerun()
         st.stop()
 
@@ -579,7 +601,7 @@ with tab_practice:
     # --- A. 単語の意味チェック (日本語) ---
     if q.get('word_jp'):
         st.write("🇯🇵 **意味を「日本語」で答えてみよう**")
-        meaning_jp_key = f"rec_meaning_jp_q{st.session_state.q_index}"
+        meaning_jp_key = f"rec_meaning_jp_turn{st.session_state.q_turn}"
         meaning_jp_audio = st.audio_input("録音ボタンを押して、日本語で意味を話してください", key=meaning_jp_key)
 
         if meaning_jp_audio:
@@ -608,13 +630,13 @@ with tab_practice:
         st.write("🇺🇸 **意味を「英語」で説明してみよう**")
         
         # ヒント機能 (AI生成)
-        hint_key = f"hint_content_{st.session_state.q_index}"
+        hint_key = f"hint_content_turn{st.session_state.q_turn}"
         if hint_key not in st.session_state:
             st.session_state[hint_key] = None
 
         col_hint, col_ans = st.columns([1, 1])
         with col_hint:
-            if st.button("💡 AIヒントを表示", key=f"btn_hint_{st.session_state.q_index}"):
+            if st.button("💡 AIヒントを表示", key=f"btn_hint_turn{st.session_state.q_turn}"):
                 with st.spinner("考えさせるヒントを生成中..."):
                     st.session_state[hint_key] = generate_ai_hint(q['word'], q.get('word_en'), api_key, model_name)
         
@@ -625,7 +647,7 @@ with tab_practice:
             with st.expander("正解の定義を見る"):
                 st.write(q.get('word_en'))
         
-        meaning_en_key = f"rec_meaning_en_q{st.session_state.q_index}"
+        meaning_en_key = f"rec_meaning_en_turn{st.session_state.q_turn}"
         meaning_en_audio = st.audio_input("録音ボタンを押して、英語で意味を説明してください", key=meaning_en_key)
 
         if meaning_en_audio:
@@ -662,7 +684,7 @@ with tab_practice:
 
     # 3. 英文録音ボタン
     st.write("🗣️ **この英文を音読してください**")
-    audio_key = f"rec_q{st.session_state.q_index}"
+    audio_key = f"rec_q_turn{st.session_state.q_turn}"
     audio_value = st.audio_input("録音ボタンを押して、英文を読んでください", key=audio_key)
 
     if audio_value:
@@ -699,7 +721,7 @@ with tab_practice:
             
             # 1. まだ不安 (Hard)
             with col_next1:
-                if st.button("😫 まだ不安 (Hard/Retry)", key=f"btn_hard_{st.session_state.q_index}", type="secondary"):
+                if st.button("😫 まだ不安 (Hard/Retry)", key=f"btn_hard_turn{st.session_state.q_turn}", type="secondary"):
                     save_log(user_name, q['word'], "SelfRating", score=0, is_correct=False, detail="Hard")
                     
                     # 関連語検索はスキップ（苦手克服を優先）
@@ -707,12 +729,13 @@ with tab_practice:
                     history_df = load_history()
                     st.session_state.questions = smart_sort_questions(st.session_state.questions, history_df, user_name, None)
                     st.session_state.q_index = 0
+                    st.session_state.q_turn += 1
                     st.rerun()
 
             # 2. 覚えた (Easy) - 合格時のみ、またはスキップ時も
             with col_next2:
                 # 発音が合格点、またはユーザーが自信ありと判断した場合
-                if st.button("😎 覚えた！ (Easy/Next)", key=f"btn_easy_{st.session_state.q_index}", type="primary"):
+                if st.button("😎 覚えた！ (Easy/Next)", key=f"btn_easy_turn{st.session_state.q_turn}", type="primary"):
                     save_log(user_name, q['word'], "SelfRating", score=100, is_correct=True, detail="Easy")
                     
                     # 関連語を検索して次の出題候補にする (Dynamic Chaining)
@@ -736,6 +759,7 @@ with tab_practice:
                     history_df = load_history()
                     st.session_state.questions = smart_sort_questions(st.session_state.questions, history_df, user_name, st.session_state.next_recommended_word)
                     st.session_state.q_index = 0
+                    st.session_state.q_turn += 1
                     st.rerun()
 
             # AI判定のメッセージ表示
