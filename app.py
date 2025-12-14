@@ -27,12 +27,21 @@ def check_password():
         return True
 
     st.markdown("## 🔒 アクセス制限")
-    st.info("課金保護のため、パスワード制限をかけています。")
     
-    password = st.text_input("パスワードを入力してください", type="password")
+    # URLパラメータからパスワードを取得 (自動ログイン用)
+    query_params = st.query_params
+    url_password = query_params.get("pwd", None)
     
     # Secretsに設定がない場合のデフォルトパスワード: "english2024"
     correct_password = st.secrets.get("APP_PASSWORD", "english2024")
+
+    # URLパラメータが合致すれば自動ログイン
+    if url_password == correct_password:
+        st.session_state.password_correct = True
+        return True
+
+    st.info("課金保護のため、パスワード制限をかけています。")
+    password = st.text_input("パスワードを入力してください", type="password")
 
     if st.button("ログイン"):
         if password == correct_password:
