@@ -623,6 +623,11 @@ with tab_practice:
     # --- A. 単語の意味チェック (日本語) ---
     if q.get('word_jp'):
         st.write("🇯🇵 **意味を「日本語」で答えてみよう**")
+        
+        # 答えをチラ見する機能
+        with st.expander("正解を見て答える (Peek Answer)"):
+            st.write(q.get('word_jp'))
+
         meaning_jp_key = f"rec_meaning_jp_turn{st.session_state.q_turn}"
         meaning_jp_audio = st.audio_input("録音ボタンを押して、日本語で意味を話してください", key=meaning_jp_key)
 
@@ -708,6 +713,11 @@ with tab_practice:
 
     # 3. 英文録音ボタン
     st.write("🗣️ **この英文を音読してください**")
+    
+    # 英文の日本語訳をチラ見する機能
+    with st.expander("日本語訳を見る (Peek Translation)"):
+        st.write(q.get('jp', '---'))
+        
     audio_key = f"rec_q_turn{st.session_state.q_turn}"
     audio_value = st.audio_input("録音ボタンを押して、英文を読んでください", key=audio_key)
 
