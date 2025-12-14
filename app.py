@@ -75,9 +75,18 @@ def get_gsheet_client():
         st.error(f"Google Sheets認証エラー: {e}")
         return None
 
-def load_history():
-    """履歴を読み込む (Google Sheets優先)"""
+def load_history(force_reload=False):
+    """
+    履歴を読み込む (Google Sheets優先)。
+    パフォーマンス向上のため、st.session_stateにキャッシュする。
+    force_reload=True の場合のみGSheetから再取得する。
+    """
+    # キャッシュがあればそれを使う
+    if not force_reload and 'history_df' in st.session_state and st.session_state.history_df is not None:
+        return st.session_state.history_df
+
     expected_headers = ["timestamp", "user", "word", "action", "score", "is_correct", "detail"]
+    df = pd.DataFrame(columns=expected_headers)
     
     client = get_gsheet_client()
     if client:
@@ -93,36 +102,36 @@ def load_history():
                 else:
                     # 1行目がヘッダーでない（データ）なら、全行をデータとして使い、ヘッダーを付与
                     df = pd.DataFrame(all_values, columns=expected_headers)
-                
-                # 日付変換
-                if 'timestamp' in df.columns:
-                     df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-                
-                # スコアを数値に変換（エラー時は0にする）
-                if 'score' in df.columns:
-                    df['score'] = pd.to_numeric(df['score'], errors='coerce').fillna(0)
-
-                return df
-                
-            # データが空の場合はヘッダーのみのDFを返す
-            return pd.DataFrame(columns=expected_headers)
-
         except gspread.exceptions.SpreadsheetNotFound:
             pass # シートがない、設定されていない場合はスルー
         except Exception:
             pass
 
-    # フォールバック: ローカルJSON
-    if os.path.exists(HISTORY_FILE):
+    # フォールバック: ローカルJSON (GSheetが空、または失敗時かつローカルがある場合)
+    if df.empty and os.path.exists(HISTORY_FILE):
         try:
-            df = pd.read_json(HISTORY_FILE, orient='records', convert_dates=['timestamp'])
-            return df
+            local_df = pd.read_json(HISTORY_FILE, orient='records', convert_dates=['timestamp'])
+            if not local_df.empty:
+                df = local_df
         except ValueError:
             pass
-    return pd.DataFrame(columns=expected_headers)
+
+    # 型変換と整形
+    if not df.empty:
+        if 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        if 'score' in df.columns:
+            df['score'] = pd.to_numeric(df['score'], errors='coerce').fillna(0)
+    else:
+        # 空の場合でもカラム定義は保持
+        df = pd.DataFrame(columns=expected_headers)
+
+    # セッションステートに保存
+    st.session_state.history_df = df
+    return df
 
 def save_log(user_name, word, action_type, score=None, is_correct=None, detail=""):
-    """学習履歴を保存する (Google Sheets優先)"""
+    """学習履歴を保存する (Google Sheets優先 + セッションステート更新)"""
     new_data = {
         "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         "user": user_name,
@@ -133,7 +142,21 @@ def save_log(user_name, word, action_type, score=None, is_correct=None, detail="
         "detail": detail
     }
     
-    # 1. Google Sheets
+    # 0. メモリ上のキャッシュ(history_df)を即時更新 (リロード回避)
+    if 'history_df' not in st.session_state:
+        load_history() # 初期化されてなければロード
+    
+    # DataFrameに追加するための形式変換
+    new_row_df = pd.DataFrame([new_data])
+    # timestampをdatetime型に変換しておくとソートで有利
+    new_row_df['timestamp'] = pd.to_datetime(new_row_df['timestamp'])
+    
+    if st.session_state.history_df.empty:
+        st.session_state.history_df = new_row_df
+    else:
+        st.session_state.history_df = pd.concat([st.session_state.history_df, new_row_df], ignore_index=True)
+
+    # 1. Google Sheets (同期書き込み: 安全性のため残すが、読み込みはキャッシュを使うので遅延感は減るはず)
     client = get_gsheet_client()
     if client:
         try:
@@ -141,30 +164,23 @@ def save_log(user_name, word, action_type, score=None, is_correct=None, detail="
             # ヘッダーがなければ書き込む
             if not sheet.get_all_values():
                  sheet.append_row(list(new_data.keys()))
-            sheet.append_row(list(new_data.values()))
-            return # クラウド保存できれば終了
+            
+            # timestampを文字列に戻して保存
+            save_values = list(new_data.values())
+            sheet.append_row(save_values)
         except gspread.exceptions.SpreadsheetNotFound:
             st.warning(f"⚠️ スプレッドシート '{SHEET_NAME}' が見つかりません。")
         except Exception as e:
             print(f"GSheet save error: {e}")
 
-    # 2. ローカル (フォールバック)
-    df = load_history() # ローカルファイルから読み込みなおす挙動になる(GSheet失敗時)
-    # ここは単純化のため、ファイル直接読み書きに戻す
-    local_df = pd.DataFrame()
-    if os.path.exists(HISTORY_FILE):
-        try:
-            local_df = pd.read_json(HISTORY_FILE, orient='records', convert_dates=['timestamp'])
-        except:
-            pass
-            
-    new_df = pd.DataFrame([new_data])
-    if not local_df.empty:
-        local_df = pd.concat([local_df, new_df], ignore_index=True)
-    else:
-        local_df = new_df
-        
-    local_df.to_json(HISTORY_FILE, orient='records', force_ascii=False, indent=4)
+    # 2. ローカル (フォールバック & バックアップ)
+    # ここはコスト削減のため、頻繁には読み書きしない設計もアリだが、
+    # 念のため追記しておく（ただし全量読み出しではなく追記モードが望ましいがJSONなので無理）
+    # 簡易的にセッションのDFをダンプする
+    try:
+         st.session_state.history_df.to_json(HISTORY_FILE, orient='records', force_ascii=False, indent=4, date_format='iso')
+    except Exception:
+         pass
 
 # --- 関数: スマート出題順ソート (SRS + 関連語) ---
 def smart_sort_questions(questions, history_df, user_name, next_recommended_word=None):
