@@ -9,8 +9,6 @@ from datetime import datetime
 import time
 import gspread
 from google.oauth2.service_account import Credentials
-import vertexai
-from vertexai.generative_models import GenerativeModel as VertexGenerativeModel, Part
 
 # --- 🛠️ 設定: モデル名はサイドバーで選択します --- 
 
@@ -190,53 +188,28 @@ if 'q_index' not in st.session_state:
 
 # --- 関数: Geminiによる判定 (英語発音 - 英文) ---
 @st.cache_data(show_spinner=False)
-def evaluate_pronunciation(audio_bytes, target_sentence, api_key, model_name, use_vertex=False, vertex_creds=None, project_id=None):
+def evaluate_pronunciation(audio_bytes, target_sentence, api_key, model_name):
     try:
-        if use_vertex:
-            # Vertex AI Client
-            vertexai.init(project=project_id, credentials=vertex_creds)
-            model = VertexGenerativeModel(model_name)
-            
-            prompt = f"""
-            あなたは【とても優しく褒め上手な】英語の先生です。
-            ユーザーが以下の英文を読み上げました。
-            
-            【お題】: "{target_sentence}"
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(model_name)
+        
+        prompt = f"""
+        あなたは【とても優しく褒め上手な】英語の先生です。
+        ユーザーが以下の英文を読み上げました。
+        
+        【お題】: "{target_sentence}"
     
-            以下のJSON形式のみで評価を出力してください:
-            {{
-                "transcription": "聞き取った英語",
-                "score": 点数(0-100の数値),
-                "advice": "日本語での具体的で丁寧なアドバイス。良い点はしっかり褒めて、改善点は優しく教えてあげてください。"
-            }}
-            """
-            
-            # Vertex AI expects Parts for multi-modal
-            audio_part = Part.from_data(data=audio_bytes, mime_type="audio/wav")
-            response = model.generate_content([prompt, audio_part])
-            
-        else:
-            # AI Studio Client
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(model_name)
-            
-            prompt = f"""
-            あなたは【とても優しく褒め上手な】英語の先生です。
-            ユーザーが以下の英文を読み上げました。
-            
-            【お題】: "{target_sentence}"
-    
-            以下のJSON形式のみで評価を出力してください:
-            {{
-                "transcription": "聞き取った英語",
-                "score": 点数(0-100の数値),
-                "advice": "日本語での具体的で丁寧なアドバイス。良い点はしっかり褒めて、改善点は優しく教えてあげてください。"
-            }}
-            """
-            response = model.generate_content([
-                prompt,
-                {"mime_type": "audio/wav", "data": audio_bytes}
-            ])
+        以下のJSON形式のみで評価を出力してください:
+        {{
+            "transcription": "聞き取った英語",
+            "score": 点数(0-100の数値),
+            "advice": "日本語での具体的で丁寧なアドバイス。良い点はしっかり褒めて、改善点は優しく教えてあげてください。"
+        }}
+        """
+        response = model.generate_content([
+            prompt,
+            {"mime_type": "audio/wav", "data": audio_bytes}
+        ])
         
         text_resp = response.text.strip()
         if text_resp.startswith("```json"):
@@ -248,13 +221,12 @@ def evaluate_pronunciation(audio_bytes, target_sentence, api_key, model_name, us
 
 # --- 関数: Geminiによる意味判定 (日本語回答) ---
 @st.cache_data(show_spinner=False)
-def evaluate_meaning_jp(audio_bytes, target_word, target_meaning, api_key, model_name, use_vertex=False, vertex_creds=None, project_id=None):
+def evaluate_meaning_jp(audio_bytes, target_word, target_meaning, api_key, model_name):
     try:
         prompt = f"""
         あなたは英語教師です。
         ユーザーは英単語 "{target_word}" の日本語訳を音声で入力しました。
         想定される正解は "{target_meaning}" です。
-        ユーザーの発言が、この単語の意味として適切か判定してください。
         一字一句同じでなくても、類義語や文脈として正しい意味であれば正解としてください。
 
         以下のJSON形式のみで評価を出力してください:
@@ -265,18 +237,12 @@ def evaluate_meaning_jp(audio_bytes, target_word, target_meaning, api_key, model
         }}
         """
 
-        if use_vertex:
-             vertexai.init(project=project_id, credentials=vertex_creds)
-             model = VertexGenerativeModel(model_name)
-             audio_part = Part.from_data(data=audio_bytes, mime_type="audio/wav")
-             response = model.generate_content([prompt, audio_part])
-        else:
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content([
-                prompt,
-                {"mime_type": "audio/wav", "data": audio_bytes}
-            ])
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(model_name)
+        response = model.generate_content([
+            prompt,
+            {"mime_type": "audio/wav", "data": audio_bytes}
+        ])
         
         text_resp = response.text.strip()
         if text_resp.startswith("```json"):
@@ -288,7 +254,7 @@ def evaluate_meaning_jp(audio_bytes, target_word, target_meaning, api_key, model
 
 # --- 関数: Geminiによる英英定義判定 (英語回答) ---
 @st.cache_data(show_spinner=False)
-def evaluate_meaning_en(audio_bytes, target_word, target_def_en, api_key, model_name, use_vertex=False, vertex_creds=None, project_id=None):
+def evaluate_meaning_en(audio_bytes, target_word, target_def_en, api_key, model_name):
     try:
         prompt = f"""
         あなたは英語教師です。
@@ -307,18 +273,12 @@ def evaluate_meaning_en(audio_bytes, target_word, target_def_en, api_key, model_
         }}
         """
 
-        if use_vertex:
-             vertexai.init(project=project_id, credentials=vertex_creds)
-             model = VertexGenerativeModel(model_name)
-             audio_part = Part.from_data(data=audio_bytes, mime_type="audio/wav")
-             response = model.generate_content([prompt, audio_part])
-        else:
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content([
-                prompt,
-                {"mime_type": "audio/wav", "data": audio_bytes}
-            ])
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(model_name)
+        response = model.generate_content([
+            prompt,
+            {"mime_type": "audio/wav", "data": audio_bytes}
+        ])
         
         text_resp = response.text.strip()
         if text_resp.startswith("```json"):
@@ -331,7 +291,7 @@ def evaluate_meaning_en(audio_bytes, target_word, target_def_en, api_key, model_
 
 # --- 関数: AIヒント生成 ---
 @st.cache_data(show_spinner=False)
-def generate_ai_hint(target_word, target_def, api_key, model_name, use_vertex=False, vertex_creds=None, project_id=None):
+def generate_ai_hint(target_word, target_def, api_key, model_name):
     try:
         prompt = f"""
         Word: "{target_word}"
@@ -343,14 +303,9 @@ def generate_ai_hint(target_word, target_def, api_key, model_name, use_vertex=Fa
         Output format: Keyword1, Keyword2, Keyword3
         """
         
-        if use_vertex:
-            vertexai.init(project=project_id, credentials=vertex_creds)
-            model = VertexGenerativeModel(model_name)
-            response = model.generate_content(prompt)
-        else:
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(model_name)
+        response = model.generate_content(prompt)
 
         return response.text.strip()
     except Exception as e:
@@ -387,70 +342,38 @@ with st.sidebar:
     st.caption(f"History File: {os.path.abspath(HISTORY_FILE)}")
     st.divider()
     
-    api_mode = st.radio("APIモード", ["AI Studio (API Key)", "Vertex AI (Paid Quota)"], horizontal=True)
-    
     model_name = st.selectbox(
         "使用するモデル",
         [
-            "gemini-2.0-flash-exp", # Vertexでは一部名前が違う可能性がありますが一旦維持
+            "gemini-2.0-flash-lite-preview-02-05", # リクエストされたFlashLite
+            "gemini-2.0-flash", 
             "gemini-1.5-flash",
             "gemini-1.5-pro",
-            "gemini-2.5-flash-lite", # ※Vertexではまだ使えない可能性があります
-            "gemini-1.0-pro"
         ],
         index=0
     )
 
-    # Vertexの設定準備
-    use_vertex = (api_mode == "Vertex AI (Paid Quota)")
-    vertex_creds = None
-    project_id = None
-    
-    if use_vertex:
-        if "gcp_service_account" not in st.secrets:
-            st.error("Vertex AIを使うには Secrets に gcp_service_account の設定が必要です")
-        else:
-            try:
-                creds_dict = dict(st.secrets["gcp_service_account"])
-                vertex_creds = Credentials.from_service_account_info(creds_dict)
-                project_id = creds_dict.get("project_id")
-                st.caption(f"Project ID: {project_id}")
-            except Exception as e:
-                st.error(f"認証情報エラー: {e}")
-
     if st.button("🛠️ 接続テスト (Test Connection)"):
-        if use_vertex and vertex_creds:
-            try:
-                vertexai.init(project=project_id, credentials=vertex_creds)
-                model_test = VertexGenerativeModel(model_name)
-                response_test = model_test.generate_content("Hello")
-                st.success(f"[Vertex AI] 接続成功！\nResponse: {response_test.text}")
-            except Exception as e:
-                st.error(f"[Vertex AI] 接続エラー: {e}\n※APIが有効化されていないか、モデル名がVertexに対応していない可能性があります。")
+        api_key_test = st.secrets.get("GEMINI_API_KEY")
+        if not api_key_test:
+            st.error("APIキーが設定されていません")
         else:
-            api_key_test = st.secrets.get("GEMINI_API_KEY")
-            if not api_key_test:
-                st.error("APIキーが設定されていません")
-            else:
-                try:
-                    genai.configure(api_key=api_key_test)
-                    model_test = genai.GenerativeModel(model_name)
-                    response_test = model_test.generate_content("Hello")
-                    st.success(f"[AI Studio] 接続成功！\nResponse: {response_test.text}")
-                except Exception as e:
-                    st.error(f"接続エラー: {e}")
+            try:
+                genai.configure(api_key=api_key_test)
+                model_test = genai.GenerativeModel(model_name)
+                response_test = model_test.generate_content("Hello")
+                st.success(f"[AI Studio] 接続成功！\nResponse: {response_test.text}")
+            except Exception as e:
+                st.error(f"接続エラー: {e}")
 
     st.divider()
     
-    if not use_vertex:
-        api_key = st.secrets.get("GEMINI_API_KEY")
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    if not api_key:
+        api_key = st.text_input("Gemini API Key", type="password")
         if not api_key:
-            api_key = st.text_input("Gemini API Key", type="password")
-            if not api_key:
-                st.error("⚠️ APIキーが必要です")
-                st.stop()
-    else:
-        api_key = "dummy" # Vertexモードでは不要だが引数合わせのため
+            st.error("⚠️ APIキーが必要です")
+            st.stop()
 
     st.divider()
     with st.expander("☁️ データ保存設定 (Google Sheets)"):
