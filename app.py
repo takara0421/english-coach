@@ -625,7 +625,7 @@ with tab_practice:
         st.write("🇯🇵 **意味を「日本語」で答えてみよう**")
         
         # 答えをチラ見する機能
-        with st.expander("正解を見て答える (Peek Answer)"):
+        with st.expander("正解を表示 (Show Answer)"):
             st.write(q.get('word_jp'))
 
         meaning_jp_key = f"rec_meaning_jp_turn{st.session_state.q_turn}"
@@ -657,23 +657,12 @@ with tab_practice:
     if q.get('word_en'):
         st.write("🇺🇸 **意味を「英語」で説明してみよう**")
         
-        # ヒント機能 (AI生成)
-        hint_key = f"hint_content_turn{st.session_state.q_turn}"
-        if hint_key not in st.session_state:
-            st.session_state[hint_key] = None
-
-        col_hint, col_ans = st.columns([1, 1])
-        with col_hint:
-            if st.button("💡 AIヒントを表示", key=f"btn_hint_turn{st.session_state.q_turn}"):
-                with st.spinner("考えさせるヒントを生成中..."):
-                    st.session_state[hint_key] = generate_ai_hint(q['word'], q.get('word_en'), api_key, model_name)
+    # word_enがある場合のみ表示
+    if q.get('word_en'):
+        st.write("🇺🇸 **意味を「英語」で説明してみよう**")
         
-        if st.session_state[hint_key]:
-            st.info(f"**Keywords:** {st.session_state[hint_key]}")
-
-        with col_ans:
-            with st.expander("正解を見て答える (Peek Answer)"):
-                st.write(q.get('word_en'))
+        with st.expander("正解を表示 (Show Answer)"):
+            st.write(q.get('word_en'))
         
         meaning_en_key = f"rec_meaning_en_turn{st.session_state.q_turn}"
         meaning_en_audio = st.audio_input("録音ボタンを押して、英語で意味を説明してください", key=meaning_en_key)
@@ -715,7 +704,7 @@ with tab_practice:
     st.write("🗣️ **この英文を音読してください**")
     
     # 英文の日本語訳をチラ見する機能
-    with st.expander("日本語訳を見る (Peek Translation)"):
+    with st.expander("正解を表示 (Show Answer)"):
         st.write(q.get('jp', '---'))
         
     audio_key = f"rec_q_turn{st.session_state.q_turn}"
