@@ -712,11 +712,16 @@ with tab_practice:
     # 模範音声
     with st.expander("🎧 英文の模範音声を聞く"):
         if q.get('en'):
-            audio_bytes = get_tts_audio_bytes(q['en'])
-            if audio_bytes:
-                st.audio(audio_bytes, format='audio/mp3')
+            # 遅延対策: 音声はボタンを押した時のみ生成・再生する
+            audio_loaded_key = f"audio_loaded_{st.session_state.q_turn}"
+            if st.session_state.get(audio_loaded_key):
+                audio_bytes = get_tts_audio_bytes(q['en'])
+                if audio_bytes:
+                    st.audio(audio_bytes, format='audio/mp3')
             else:
-                st.error("音声生成エラー")
+                if st.button("🔊 音声を生成・再生", key=f"btn_load_audio_{st.session_state.q_turn}"):
+                    st.session_state[audio_loaded_key] = True
+                    st.rerun()
 
     # 3. 英文録音ボタン
     st.write("🗣️ **この英文を音読してください**")
