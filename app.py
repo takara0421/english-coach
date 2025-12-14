@@ -97,6 +97,11 @@ def load_history():
                 # 日付変換
                 if 'timestamp' in df.columns:
                      df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+                
+                # スコアを数値に変換（エラー時は0にする）
+                if 'score' in df.columns:
+                    df['score'] = pd.to_numeric(df['score'], errors='coerce').fillna(0)
+
                 return df
                 
             # データが空の場合はヘッダーのみのDFを返す
