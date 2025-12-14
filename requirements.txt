@@ -4,3 +4,4 @@ gtts
 pandas
 gspread
 google-auth
+google-cloud-aiplatform
