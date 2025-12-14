@@ -323,7 +323,19 @@ with st.sidebar:
     st.header("🤖 AIモデル設定")
     model_name = st.selectbox(
         "使用するモデル",
-        ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"],
+        [
+            "gemini-2.5-flash",
+            "gemini-2.5-pro",
+            "gemini-2.5-flash-lite",
+            "gemini-2.0-flash-exp",
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-lite",
+            "gemini-exp-1206",
+            "gemini-1.5-flash",
+            "gemini-1.5-pro",
+            "gemini-flash-latest",
+            "gemini-pro-latest"
+        ],
         index=0
     )
     
