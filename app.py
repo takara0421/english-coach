@@ -667,7 +667,7 @@ with tab_practice:
             st.info(f"**Keywords:** {st.session_state[hint_key]}")
 
         with col_ans:
-            with st.expander("正解の定義を見る"):
+            with st.expander("正解を見て答える (Peek Answer)"):
                 st.write(q.get('word_en'))
         
         meaning_en_key = f"rec_meaning_en_turn{st.session_state.q_turn}"
@@ -687,8 +687,9 @@ with tab_practice:
                     st.error(f"❌ **Not quite...** (You said: \"{res_en['transcription']}\")\n\n{res_en['comment']}")
                     save_log(user_name, q['word'], "English Definition", score=0, is_correct=False, detail=res_en['transcription'])
 
-                # 正解を表示
-                st.info(f"💡 **Definition:** {q.get('word_en')}")
+                # 正解を表示 (Expanderでオンオフ可能に)
+                with st.expander("💡 正解の定義を表示 (Show Definition)"):
+                    st.info(f"{q.get('word_en')}")
 
         st.markdown("---")
 
