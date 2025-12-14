@@ -558,7 +558,12 @@ with tab_history:
     
     if not df.empty:
         # ユーザーでフィルタリング
-        user_df = df[df['user'] == user_name].copy()
+        if 'user' not in df.columns:
+            st.error("⚠️ 履歴データの形式が正しくありません。")
+            st.warning("Googleスプレッドシートの1行目に不要なテキストが入っている可能性があります。シートの **1行目(A1)** をすべて削除して、空の状態にしてください。")
+            st.write("現在のヘッダー:", df.columns.tolist())
+        else:
+            user_df = df[df['user'] == user_name].copy()
         
         if not user_df.empty:
             # 最新順に並び替え
