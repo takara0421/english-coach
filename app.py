@@ -734,61 +734,63 @@ with tab_practice:
                 with st.expander("💡 日本語訳を表示 (Show Translation)"):
                     st.info(f"{q.get('jp', '---')}")
 
-            # アドバイスと次へ (自己評価付き)
-            st.subheader("自己評価 & 次へ")
-            
-            col_next1, col_next2 = st.columns(2)
-            
-            # ロジック: ボタンが押されたら -> ログ保存 -> 関連語検索 -> 再ソート -> リロード
-            
-            # 1. まだ不安 (Hard)
-            with col_next1:
-                if st.button("😫 まだ不安 (Hard/Retry)", key=f"btn_hard_turn{st.session_state.q_turn}", type="secondary"):
-                    save_log(user_name, q['word'], "SelfRating", score=0, is_correct=False, detail="Hard")
-                    
-                    # 関連語検索はスキップ（苦手克服を優先）
-                    # 再ソートして次へ
-                    history_df = load_history()
-                    st.session_state.questions = smart_sort_questions(st.session_state.questions, history_df, user_name, None)
-                    st.session_state.q_index = 0
-                    st.session_state.q_turn += 1
-                    st.rerun()
-
-            # 2. 覚えた (Easy) - 合格時のみ、またはスキップ時も
-            with col_next2:
-                # 発音が合格点、またはユーザーが自信ありと判断した場合
-                if st.button("😎 覚えた！ (Easy/Next)", key=f"btn_easy_turn{st.session_state.q_turn}", type="primary"):
-                    save_log(user_name, q['word'], "SelfRating", score=100, is_correct=True, detail="Easy")
-                    
-                    # 関連語を検索して次の出題候補にする (Dynamic Chaining)
-                    with st.spinner("AIが次の関連語を選んでいます..."):
-                        related_words = get_related_words_ai(q['word'], api_key, model_name)
-                        
-                        # 候補の中から、問題リストにあるものを探す
-                        next_word_candidate = None
-                        existing_words = {item['word'].lower() for item in st.session_state.questions}
-                        
-                        for rw in related_words:
-                            if rw in existing_words and rw != q['word'].lower():
-                                next_word_candidate = rw
-                                break
-                        
-                        st.session_state.next_recommended_word = next_word_candidate
-                        if next_word_candidate:
-                            st.toast(f"🔗 関連語が見つかりました: {next_word_candidate}")
-                    
-                    # 再ソート
-                    history_df = load_history()
-                    st.session_state.questions = smart_sort_questions(st.session_state.questions, history_df, user_name, st.session_state.next_recommended_word)
-                    st.session_state.q_index = 0
-                    st.session_state.q_turn += 1
-                    st.rerun()
+            # (自己評価ボタンを下に移動しました)
 
             # AI判定のメッセージ表示
             if result['score'] >= 80:
                 st.success(f"**Excellent!**\n{result['advice']}")
             else:
                 st.error(f"**Try Again...**\n{result['advice']}")
+
+    # アドバイスと次へ (自己評価付き)
+    st.subheader("自己評価 & 次へ")
+    
+    col_next1, col_next2 = st.columns(2)
+    
+    # ロジック: ボタンが押されたら -> ログ保存 -> 関連語検索 -> 再ソート -> リロード
+    
+    # 1. まだ不安 (Hard)
+    with col_next1:
+        if st.button("😫 まだ不安 (Hard/Retry)", key=f"btn_hard_turn{st.session_state.q_turn}", type="secondary"):
+            save_log(user_name, q['word'], "SelfRating", score=0, is_correct=False, detail="Hard")
+            
+            # 関連語検索はスキップ（苦手克服を優先）
+            # 再ソートして次へ
+            history_df = load_history()
+            st.session_state.questions = smart_sort_questions(st.session_state.questions, history_df, user_name, None)
+            st.session_state.q_index = 0
+            st.session_state.q_turn += 1
+            st.rerun()
+
+    # 2. 覚えた (Easy) - 合格時のみ、またはスキップ時も
+    with col_next2:
+        # 発音が合格点、またはユーザーが自信ありと判断した場合
+        if st.button("😎 覚えた！ (Easy/Next)", key=f"btn_easy_turn{st.session_state.q_turn}", type="primary"):
+            save_log(user_name, q['word'], "SelfRating", score=100, is_correct=True, detail="Easy")
+            
+            # 関連語を検索して次の出題候補にする (Dynamic Chaining)
+            with st.spinner("AIが次の関連語を選んでいます..."):
+                related_words = get_related_words_ai(q['word'], api_key, model_name)
+                
+                # 候補の中から、問題リストにあるものを探す
+                next_word_candidate = None
+                existing_words = {item['word'].lower() for item in st.session_state.questions}
+                
+                for rw in related_words:
+                    if rw in existing_words and rw != q['word'].lower():
+                        next_word_candidate = rw
+                        break
+                
+                st.session_state.next_recommended_word = next_word_candidate
+                if next_word_candidate:
+                    st.toast(f"🔗 関連語が見つかりました: {next_word_candidate}")
+            
+            # 再ソート
+            history_df = load_history()
+            st.session_state.questions = smart_sort_questions(st.session_state.questions, history_df, user_name, st.session_state.next_recommended_word)
+            st.session_state.q_index = 0
+            st.session_state.q_turn += 1
+            st.rerun()
 
 # ==========================================
 # タブ2: 学習履歴 (History)
