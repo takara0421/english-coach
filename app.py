@@ -466,6 +466,9 @@ with tab_practice:
                 else:
                     st.error(f"❌ **不正解...** (聞き取り: {res_jp['transcription']})\n\n{res_jp['comment']}")
                     save_log(user_name, q['word'], "Japanese Meaning", score=0, is_correct=False, detail=res_jp['transcription'])
+                
+                # 正解を表示
+                st.info(f"💡 **正解:** {q.get('word_jp')}")
 
     st.markdown("---")
 
@@ -508,6 +511,9 @@ with tab_practice:
                 else:
                     st.error(f"❌ **Not quite...** (You said: \"{res_en['transcription']}\")\n\n{res_en['comment']}")
                     save_log(user_name, q['word'], "English Definition", score=0, is_correct=False, detail=res_en['transcription'])
+
+                # 正解を表示
+                st.info(f"💡 **Definition:** {q.get('word_en')}")
 
         st.markdown("---")
 
