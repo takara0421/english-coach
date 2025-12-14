@@ -835,18 +835,30 @@ with tab_history:
             # 最新順に並び替え
             user_df = user_df.sort_values('timestamp', ascending=False)
             
-            # 概要メトリクス
+            # 習熟度集計 (SelfRatingの最新状態をもとに計算)
+            status_df = user_df[user_df['action'] == 'SelfRating'].sort_values('timestamp')
+            
+            mastered_count = 0
+            review_count = 0
+            
+            if not status_df.empty:
+                # 単語ごとの最新ステータスを取得
+                latest_status = status_df.drop_duplicates('word', keep='last')
+                mastered_count = len(latest_status[latest_status['detail'] == 'Easy'])
+                review_count = len(latest_status[latest_status['detail'] == 'Hard'])
+
+            total_q = len(st.session_state.questions) if 'questions' in st.session_state else 0
+            # 未学習 = 全体 - (覚えた + 不安)
+            unlearned_count = max(0, total_q - (mastered_count + review_count))
+
+            # 概要メトリクス表示
             col_m1, col_m2, col_m3 = st.columns(3)
             with col_m1:
-                st.metric("Total Activities", len(user_df))
+                st.metric("✅ 覚えた単語 (Mastered)", f"{mastered_count}", delta=f"{(mastered_count/total_q*100):.1f}%" if total_q else None)
             with col_m2:
-                pron_df = user_df[user_df['action'] == 'Pronunciation']
-                avg_score = pron_df['score'].mean() if not pron_df.empty else 0
-                st.metric("Avg Pronunciation Score", f"{avg_score:.1f}")
+                st.metric("🔥 不安な単語 (Review)", f"{review_count}", delta_color="inverse")
             with col_m3:
-                # 修正: 'is_correct'が文字列の場合も考慮して集計
-                correct_count = user_df['is_correct'].apply(lambda x: x.lower() == 'true' if isinstance(x, str) else bool(x)).sum()
-                st.metric("Total Correct/Pass", f"{correct_count}")
+                st.metric("⬜ 未学習 (Unlearned)", f"{unlearned_count}")
 
             # グラフ表示 (発音スコアの推移)
             if not pron_df.empty:
