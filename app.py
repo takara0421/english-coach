@@ -213,16 +213,19 @@ def evaluate_pronunciation(audio_bytes, target_sentence, api_key, model_name):
         model = genai.GenerativeModel(model_name)
         
         prompt = f"""
-        あなたは【とても優しく褒め上手な】英語の先生です。
+        あなたは【発音に厳しいプロの】英語コーチです。
         ユーザーが以下の英文を読み上げました。
         
         【お題】: "{target_sentence}"
+        
+        あなたは、ネイティブスピーカーの基準で厳密に審査を行います。
+        些細な発音のズレやアクセントの間違いも見逃さず、厳しく採点してください。
     
         以下のJSON形式のみで評価を出力してください:
         {{
             "transcription": "聞き取った英語",
-            "score": 点数(0-100の数値),
-            "advice": "日本語での具体的で丁寧なアドバイス。良い点はしっかり褒めて、改善点は優しく教えてあげてください。"
+            "score": 点数(0-100の数値。厳しめに判定してください),
+            "advice": "日本語でのアドバイス。褒めるよりも、改善すべき点（発音、イントネーション、リズムなど）を具体的かつ論理的に指摘してください。"
         }}
         """
         response = model.generate_content([
@@ -556,9 +559,9 @@ with tab_practice:
             # 履歴保存
             save_log(user_name, q['word'], "Pronunciation", score=result['score'], is_correct=(result['score'] >= 80), detail=f"Transcription: {result['transcription']}")
 
-            # 単語と文章の日本語訳を表示 (答え合わせ)
+            # 日本語訳を表示 (答え合わせ)
             with st.container():
-                st.info(f"**単語:** {q.get('word', '')}\n\n**意味(JP):** {q.get('word_jp', '---')}\n\n**定義(EN):** {q.get('word_en', '---')}\n\n**文章訳:** {q.get('jp', '---')}")
+                st.info(f"**Japanese:** {q.get('jp', '---')}")
 
             # アドバイスと次へボタン
             if result['score'] >= 80:
