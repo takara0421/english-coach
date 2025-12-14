@@ -3,6 +3,7 @@ import google.generativeai as genai
 from gtts import gTTS
 import json
 import io
+import threading
 import random
 import os
 import pandas as pd
@@ -143,7 +144,23 @@ def load_history(force_reload=False):
 
     # セッションステートに保存
     st.session_state.history_df = df
+    st.session_state.history_df = df
     return df
+
+def write_gsheet_background(new_data, service_account_info):
+    """バックグラウンドレッドでGSheetに書き込む（UIブロック回避）"""
+    try:
+        # スコープはグローバル定義のSCOPESを使用
+        creds = Credentials.from_service_account_info(service_account_info, scopes=SCOPES)
+        client = gspread.authorize(creds)
+        sheet = client.open(SHEET_NAME).sheet1
+        
+        # データの書き込み (append)
+        save_values = list(new_data.values())
+        sheet.append_row(save_values)
+    except Exception as e:
+        # バックグラウンドでの失敗はコンソールに出力のみ
+        print(f"Background GSheet save failed: {e}")
 
 def save_log(user_name, word, action_type, score=None, is_correct=None, detail=""):
     """学習履歴を保存する (Google Sheets優先 + セッションステート更新)"""
@@ -171,22 +188,15 @@ def save_log(user_name, word, action_type, score=None, is_correct=None, detail="
     else:
         st.session_state.history_df = pd.concat([st.session_state.history_df, new_row_df], ignore_index=True)
 
-    # 1. Google Sheets (同期書き込み: 安全性のため残すが、読み込みはキャッシュを使うので遅延感は減るはず)
-    client = get_gsheet_client()
-    if client:
+    # 1. Google Sheets (非同期バックグラウンド書き込み)
+    if "gcp_service_account" in st.secrets:
         try:
-            sheet = client.open(SHEET_NAME).sheet1
-            # ヘッダーがなければ書き込む
-            if not sheet.get_all_values():
-                 sheet.append_row(list(new_data.keys()))
-            
-            # timestampを文字列に戻して保存
-            save_values = list(new_data.values())
-            sheet.append_row(save_values)
-        except gspread.exceptions.SpreadsheetNotFound:
-            st.warning(f"⚠️ スプレッドシート '{SHEET_NAME}' が見つかりません。")
+            # st.secretsはスレッドセーフでない場合があるため、dictに変換して渡す
+            sa_info = dict(st.secrets["gcp_service_account"])
+            t = threading.Thread(target=write_gsheet_background, args=(new_data, sa_info))
+            t.start()
         except Exception as e:
-            print(f"GSheet save error: {e}")
+            print(f"Failed to start background thread: {e}")
 
     # 2. ローカル (フォールバック & バックアップ)
     # ここはコスト削減のため、頻繁には読み書きしない設計もアリだが、
