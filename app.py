@@ -2,6 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 from gtts import gTTS
 import json
+import io
 import random
 import os
 import pandas as pd
@@ -55,6 +56,20 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 履歴管理用の関数 ---
+# --- 🛠️ 高速化のためのキャッシュ関数 ---
+@st.cache_data
+def get_tts_audio_bytes(text):
+    """TTS音声を生成してバイト列で返す（キャッシュ対応・高速化）"""
+    try:
+        if not text:
+            return None
+        tts = gTTS(text, lang='en')
+        mp3_fp = io.BytesIO()
+        tts.write_to_fp(mp3_fp)
+        return mp3_fp.getvalue()
+    except Exception:
+        return None
+
 # --- 履歴管理用の関数 (Google Sheets対応版) ---
 HISTORY_FILE = 'history.json'
 SHEET_NAME = 'EnglishCoach_Data' # ユーザーに作成してもらうスプレッドシート名
@@ -687,12 +702,11 @@ with tab_practice:
     # 模範音声
     with st.expander("🎧 英文の模範音声を聞く"):
         if q.get('en'):
-            try:
-                tts = gTTS(q['en'], lang='en')
-                tts.save("sample.mp3")
-                st.audio("sample.mp3")
-            except:
-                st.error("音声エラー")
+            audio_bytes = get_tts_audio_bytes(q['en'])
+            if audio_bytes:
+                st.audio(audio_bytes, format='audio/mp3')
+            else:
+                st.error("音声生成エラー")
 
     # 3. 英文録音ボタン
     st.write("🗣️ **この英文を音読してください**")
