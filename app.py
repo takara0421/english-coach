@@ -166,6 +166,105 @@ def save_log(user_name, word, action_type, score=None, is_correct=None, detail="
         
     local_df.to_json(HISTORY_FILE, orient='records', force_ascii=False, indent=4)
 
+# --- 関数: スマート出題順ソート (SRS + 関連語) ---
+def smart_sort_questions(questions, history_df, user_name, next_recommended_word=None):
+    """
+    学習履歴とおすすめ単語に基づいて問題をソートする。
+    優先順位:
+    1. AIおすすめ単語 (関連語チェイン)
+    2. 新規・忘却・失敗した単語 (SRS Review Due)
+    3. まだ先の単語
+    """
+    now = datetime.now()
+    scored_questions = []
+
+    # 履歴データを辞書化して高速化 (O(N)対策)
+    # word -> list of history records
+    word_history_map = {}
+    
+    if not history_df.empty and 'user' in history_df.columns:
+        user_history = history_df[history_df['user'] == user_name]
+        for record in user_history.to_dict('records'):
+            w = record['word']
+            if w not in word_history_map:
+                word_history_map[w] = []
+            word_history_map[w].append(record)
+    
+    for q in questions:
+        word = q['word']
+        priority = 0
+        
+        # 0. AIおすすめ単語ブースト
+        if next_recommended_word and word.lower() == next_recommended_word.lower():
+            priority += 999999 # 最優先
+            
+        else:
+            # SRSロジック
+            # 辞書から履歴を取得 (高速)
+            records = word_history_map.get(word, [])
+            
+            streak = 0
+            last_review = None
+            
+            if records:
+                # 日付降順に並び替え (辞書化してるのでここでソートが必要だが、レコード数は少ないはず)
+                # stringのtimestampをdatetimeに変換してソート
+                for r in records:
+                    if not isinstance(r['timestamp'], datetime):
+                         try:
+                             r['timestamp'] = pd.to_datetime(r['timestamp'])
+                         except:
+                             pass
+                
+                # timestampを持つものだけでソート
+                valid_records = [r for r in records if isinstance(r['timestamp'], datetime)]
+                valid_records.sort(key=lambda x: x['timestamp'], reverse=True)
+                
+                if valid_records:
+                    last_review = valid_records[0]['timestamp']
+                    
+                    # ストリーク計算
+                    for row in valid_records:
+                        is_pass = row['is_correct']
+                        
+                        # 自己評価や発音スコアの考慮
+                        if row['action'] == 'Pronunciation' and row['score'] < 80:
+                            is_pass = False
+                        if row['action'] == 'SelfRating' and row['detail'] == 'Hard':
+                            is_pass = False
+                            
+                        if is_pass:
+                            streak += 1
+                        else:
+                            break # 連続正解ストップ
+            
+            # 間隔（日数）の決定
+            if streak == 0: interval = 0
+            elif streak == 1: interval = 1
+            elif streak == 2: interval = 3
+            elif streak == 3: interval = 7
+            elif streak == 4: interval = 14
+            else: interval = 30
+            
+            # 優先度（どれくらい期限を過ぎているか）
+            if last_review is None:
+                # 未学習: 優先度高めだが、おすすめよりは下
+                priority = 1000 + random.random()
+            else:
+                try:
+                     days_since = (now - last_review).total_seconds() / 86400
+                     # (経過日数 - 間隔) がプラスなら復習時期
+                     priority = days_since - interval
+                except:
+                     priority = 1000 # エラー時は未学習扱い
+        
+        q['priority'] = priority
+        scored_questions.append(q)
+        
+    # 優先度が高い順にソート
+    scored_questions.sort(key=lambda x: x['priority'], reverse=True)
+    return scored_questions
+
 # --- セッション状態の初期化 ---
 if 'questions' not in st.session_state:
     questions_data = []
@@ -363,104 +462,7 @@ def get_related_words_ai(target_word, api_key, model_name):
     except:
         return []
 
-# --- 関数: スマート出題順ソート (SRS + 関連語) ---
-def smart_sort_questions(questions, history_df, user_name, next_recommended_word=None):
-    """
-    学習履歴とおすすめ単語に基づいて問題をソートする。
-    優先順位:
-    1. AIおすすめ単語 (関連語チェイン)
-    2. 新規・忘却・失敗した単語 (SRS Review Due)
-    3. まだ先の単語
-    """
-    now = datetime.now()
-    scored_questions = []
 
-    # 履歴データを辞書化して高速化 (O(N)対策)
-    # word -> list of history records
-    word_history_map = {}
-    
-    if not history_df.empty and 'user' in history_df.columns:
-        user_history = history_df[history_df['user'] == user_name]
-        for record in user_history.to_dict('records'):
-            w = record['word']
-            if w not in word_history_map:
-                word_history_map[w] = []
-            word_history_map[w].append(record)
-    
-    for q in questions:
-        word = q['word']
-        priority = 0
-        
-        # 0. AIおすすめ単語ブースト
-        if next_recommended_word and word.lower() == next_recommended_word.lower():
-            priority += 999999 # 最優先
-            
-        else:
-            # SRSロジック
-            # 辞書から履歴を取得 (高速)
-            records = word_history_map.get(word, [])
-            
-            streak = 0
-            last_review = None
-            
-            if records:
-                # 日付降順に並び替え (辞書化してるのでここでソートが必要だが、レコード数は少ないはず)
-                # stringのtimestampをdatetimeに変換してソート
-                for r in records:
-                    if not isinstance(r['timestamp'], datetime):
-                         try:
-                             r['timestamp'] = pd.to_datetime(r['timestamp'])
-                         except:
-                             pass
-                
-                # timestampを持つものだけでソート
-                valid_records = [r for r in records if isinstance(r['timestamp'], datetime)]
-                valid_records.sort(key=lambda x: x['timestamp'], reverse=True)
-                
-                if valid_records:
-                    last_review = valid_records[0]['timestamp']
-                    
-                    # ストリーク計算
-                    for row in valid_records:
-                        is_pass = row['is_correct']
-                        
-                        # 自己評価や発音スコアの考慮
-                        if row['action'] == 'Pronunciation' and row['score'] < 80:
-                            is_pass = False
-                        if row['action'] == 'SelfRating' and row['detail'] == 'Hard':
-                            is_pass = False
-                            
-                        if is_pass:
-                            streak += 1
-                        else:
-                            break # 連続正解ストップ
-            
-            # 間隔（日数）の決定
-            if streak == 0: interval = 0
-            elif streak == 1: interval = 1
-            elif streak == 2: interval = 3
-            elif streak == 3: interval = 7
-            elif streak == 4: interval = 14
-            else: interval = 30
-            
-            # 優先度（どれくらい期限を過ぎているか）
-            if last_review is None:
-                # 未学習: 優先度高めだが、おすすめよりは下
-                priority = 1000 + random.random()
-            else:
-                try:
-                     days_since = (now - last_review).total_seconds() / 86400
-                     # (経過日数 - 間隔) がプラスなら復習時期
-                     priority = days_since - interval
-                except:
-                     priority = 1000 # エラー時は未学習扱い
-        
-        q['priority'] = priority
-        scored_questions.append(q)
-        
-    # 優先度が高い順にソート
-    scored_questions.sort(key=lambda x: x['priority'], reverse=True)
-    return scored_questions
 
 # --- サイドバー: ユーザー設定 ---
 with st.sidebar:
