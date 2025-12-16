@@ -21,9 +21,27 @@ st.set_page_config(page_title="AI英会話コーチ", page_icon="🎙️", layou
 # --- 自動スクロール用JS (次へ進んだ時にトップに戻る) ---
 if st.session_state.get('scroll_to_top'):
     components.html(
-        f"""
+        """
             <script>
-                window.parent.scrollTo({{top: 0, behavior: 'instant'}});
+                try {
+                    var doc = window.parent.document;
+                    
+                    // 1. Standard window scroll
+                    window.parent.scrollTo(0, 0);
+                    
+                    // 2. Element scrolling (Streamlit containers)
+                    var elements = doc.querySelectorAll(".main, section[data-testid='stMain'], [data-testid='stAppViewContainer']");
+                    elements.forEach(function(el) {
+                        el.scrollTop = 0;
+                    });
+                    
+                    // 3. Fallback for mobile/older browsers
+                    doc.body.scrollTop = 0; // For Safari
+                    doc.documentElement.scrollTop = 0; // For Chrome, Firefox, IE and Opera
+                    
+                } catch(e) {
+                    console.log("Scroll script error:", e);
+                }
             </script>
         """,
         height=0,
