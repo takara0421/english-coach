@@ -557,7 +557,19 @@ with st.sidebar:
     df_history = load_history()
     existing_users = []
     if not df_history.empty and 'user' in df_history.columns:
-        existing_users = df_history['user'].dropna().unique().tolist()
+        # ユーザーごとの最終アクティビティ時刻を取得してソート
+        # これにより、最後に使った人がデフォルトで選択されるようになる
+        if 'timestamp' in df_history.columns:
+            # timestampがdatetime型であることを保証
+            df_history['timestamp'] = pd.to_datetime(df_history['timestamp'], errors='coerce')
+            
+            # ユーザーごとに最新のタイムスタンプを取得
+            last_active = df_history.groupby('user')['timestamp'].max().reset_index()
+            # 最新順にソート
+            last_active = last_active.sort_values('timestamp', ascending=False)
+            existing_users = last_active['user'].tolist()
+        else:
+            existing_users = df_history['user'].dropna().unique().tolist()
     
     # ユーザー選択のUI
     if existing_users:
@@ -565,16 +577,38 @@ with st.sidebar:
         login_mode = st.radio("モード選択", ["既存ユーザー", "新規作成"], horizontal=True)
         
         if login_mode == "既存ユーザー":
-            user_name = st.selectbox("ユーザーを選択してください", existing_users)
+            # デフォルトの選択ロジック:
+            # 1. URLパラメータ (端末/ブックマーク保存)
+            # 2. 履歴の最新 (直近のアクティビティ)
+            # 3. 先頭
+            
+            default_index = 0
+            
+            # URLパラメータから取得
+            query_user = st.query_params.get("user")
+            
+            if query_user and query_user in existing_users:
+                default_index = existing_users.index(query_user)
+            
+            # リストの先頭（＝直近アクティブだったユーザー）がデフォルトになる
+            user_name = st.selectbox("ユーザーを選択してください", existing_users, index=default_index)
+            
+            # 選択されたユーザー状をURLパラメータに保存 (次回アクセスのため)
+            if user_name != query_user:
+                 st.query_params["user"] = user_name
+                 
         else:
             new_user_input = st.text_input("新しいユーザー名を入力", value="")
             if new_user_input:
                 user_name = new_user_input
+                st.query_params["user"] = user_name
             else:
                 user_name = "Guest" # 入力がない場合のデフォルト
     else:
         # まだ履歴がない場合はテキスト入力のみ
         user_name = st.text_input("お名前 (History保存用)", value="Guest")
+        if user_name != "Guest":
+             st.query_params["user"] = user_name
 
     st.info(f"現在のユーザー: **{user_name}** さん")
     
