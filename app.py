@@ -888,7 +888,15 @@ with tab_history:
             with col_m3:
                 st.metric("⬜ 未学習 (Unlearned)", f"{unlearned_count}")
 
-            # グラフ表示 (発音スコアの推移)
+            # グラフ表示 1: 日付ごとの活動量 (Actions per Day)
+            st.subheader("📅 Daily Activity")
+            if 'timestamp' in user_df.columns:
+                # 日付カラムを作成
+                user_df['date'] = user_df['timestamp'].dt.date
+                daily_counts = user_df.groupby('date').size().reset_index(name='count')
+                st.bar_chart(daily_counts, x='date', y='count')
+
+            # グラフ表示 2: 発音スコアの推移
             pron_df = user_df[user_df['action'] == 'Pronunciation']
             if not pron_df.empty:
                 st.subheader("📈 Pronunciation Score Progress")
