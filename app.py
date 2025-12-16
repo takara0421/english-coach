@@ -431,13 +431,18 @@ def evaluate_meaning_jp(audio_bytes, target_word, target_meaning, api_key, model
     try:
         prompt = f"""
         Role: Supportive Teacher.
-        Task: Check if user's Japanese audio matches the meaning of English word "{target_word}".
+        Task: 
+        1. Transcribe the user's Japanese audio accurately.
+        2. Check if the meaning matches the English word "{target_word}".
+        
         Expected Meaning: "{target_meaning}"
-        Criteria: Lenient. If the meaning is generally correct, mark it as correct even if it's not an exact match.
+        Criteria: 
+        - Transcription: Strict and accurate.
+        - Meaning Evaluation: Lenient. If the meaning is generally correct, mark it as correct even if the wording is different.
         
         Output JSON only:
         {{
-            "transcription": "Transcribed Japanese",
+            "transcription": "The exact transcription of what the user said",
             "is_correct": boolean,
             "comment": "Brief encouragement and feedback in Japanese (max 1-2 sentences)."
         }}
@@ -464,13 +469,18 @@ def evaluate_meaning_en(audio_bytes, target_word, target_def_en, api_key, model_
     try:
         prompt = f"""
         Role: Supportive Teacher.
-        Task: Check if user's English explanation matches the meaning of "{target_word}".
+        Task: 
+        1. Transcribe the user's English audio accurately.
+        2. Check if the explanation matches the meaning of "{target_word}".
+        
         Definition: "{target_def_en}"
-        Criteria: Lenient. Accept simple explanations or keywords if the core idea is conveyed.
+        Criteria: 
+        - Transcription: Strict and accurate.
+        - Meaning Evaluation: Lenient. Accept simple explanations or keywords if the core idea is conveyed.
         
         Output JSON only:
         {{
-            "transcription": "Transcribed English",
+            "transcription": "The exact transcription of what the user said",
             "is_correct": boolean,
             "comment": "Brief encouragement and feedback in Japanese (max 2 sentences)."
         }}
